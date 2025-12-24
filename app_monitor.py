@@ -1,37 +1,38 @@
+import os
 import msal
 import requests
 from datetime import datetime, timezone, timedelta
-from dotenv import load_dotenv
 from cryptography.hazmat.primitives import hashes
-import jwt  # 可选：解码 JWT token 用于调试
-import os
+from dotenv import load_dotenv
+import jwt
+from flask import Flask, request, jsonify, Response
 
 # 加载 .env
 load_dotenv()
 
-# ================================
-# 配置（建议从环境变量读取）
-# ================================
+# 环境变量与默认值
 CLIENT_ID = os.getenv("AZURE_CLIENT_ID", "your-client-id")
 TENANT_ID = os.getenv("AZURE_TENANT_ID", "your-tenant-id")
 CERT_PATH = os.getenv("CERT_FILE", "app_monitor_cert.pem")
 KEY_PATH = os.getenv("KEY_FILE", "app_monitor_key.pem")
 
-EXPIRY_THRESHOLD_DAYS = int(os.getenv("EXPIRY_THRESHOLD_DAYS", "120"))
-
-# 新增：控制是否显示“没有密码（passwordCredentials 为空）的应用”的条目
-# 0 表示隐藏，1 表示显示（默认显示）
-SHOW_APPS_WITHOUT_PASSWORD = os.getenv("SHOW_APPS_WITHOUT_PASSWORD", "1") == "1"
+DEFAULT_EXPIRY_THRESHOLD_DAYS = int(os.getenv("EXPIRY_THRESHOLD_DAYS", "120"))
+DEFAULT_SHOW_APPS_WITHOUT_PASSWORD = os.getenv("SHOW_APPS_WITHOUT_PASSWORD", "1") == "1"
+CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "300"))  # 结果缓存，默认 5 分钟
+PORT = int(os.getenv("PORT", "8000"))
+DEBUG_TOKEN = os.getenv("DEBUG_TOKEN", "0") == "1"
 
 AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
 GRAPH_API_SCOPE = ["https://graph.microsoft.com/.default"]
-
-# 注意：使用 applications，与 Azure 门户“应用注册 -> 证书和密码”一致
+# 使用 applications，与 Azure 门户“应用注册 -> 证书和密码”一致
 GRAPH_API_URL = "https://graph.microsoft.com/v1.0/applications"
 
-# ================================
+app = Flask(__name__)
+
+# 简单缓存
+CACHE = {"data": None, "fetched_at": 0, "params": None}
+
 # 从证书文件提取 thumbprint（用于 MSAL）
-# ================================
 def get_cert_thumbprint(cert_path):
     from cryptography import x509
     from cryptography.hazmat.backends import default_backend
@@ -44,15 +45,13 @@ def get_cert_thumbprint(cert_path):
     thumbprint = cert.fingerprint(hashes.SHA1()).hex().upper()
     return thumbprint
 
-# ================================
 # 获取访问令牌（证书认证）
-# ================================
 def get_access_token():
     thumbprint = get_cert_thumbprint(CERT_PATH)
     with open(KEY_PATH, "r") as f:
         private_key = f.read()
 
-    app = msal.ConfidentialClientApplication(
+    app_msal = msal.ConfidentialClientApplication(
         CLIENT_ID,
         authority=AUTHORITY,
         client_credential={
@@ -61,61 +60,52 @@ def get_access_token():
         }
     )
 
-    result = app.acquire_token_for_client(scopes=GRAPH_API_SCOPE)
+    result = app_msal.acquire_token_for_client(scopes=GRAPH_API_SCOPE)
     if "access_token" in result:
+        if DEBUG_TOKEN:
+            try:
+                decoded = jwt.decode(result["access_token"], options={"verify_signature": False})
+                print("DEBUG token:", {"roles": decoded.get("roles"), "appid": decoded.get("appid"), "iss": decoded.get("iss")})
+            except Exception as e:
+                print("DEBUG token decode error:", e)
         return result["access_token"]
     else:
         raise Exception(f"获取令牌失败: {result.get('error_description', result)}")
 
-# ================================
-# 获取并检查凭据（检验证书和密码的截止期限）
-# ================================
-def check_expiry():
+# 查询并整理即将过期的凭据
+def fetch_expiring(threshold_days: int, show_without_password: bool):
     token = get_access_token()
-
-    # 可选：调试 token 内容
-    if os.getenv("DEBUG_TOKEN", "0") == "1":
-        try:
-            decoded = jwt.decode(token, options={"verify_signature": False})
-            print("✅ [DEBUG] Token 内容:")
-            print(f"   Roles: {decoded.get('roles')}")
-            print(f"   App ID: {decoded.get('appid')}")
-            print(f"   Issuer: {decoded.get('iss')}")
-            print()
-        except Exception as e:
-            print(f"⚠️ [DEBUG] 无法解码 token: {e}")
-
     headers = {"Authorization": f"Bearer {token}"}
-    expiring = []
 
-    cutoff = datetime.now(timezone.utc) + timedelta(days=EXPIRY_THRESHOLD_DAYS)
+    cutoff = datetime.now(timezone.utc) + timedelta(days=threshold_days)
 
-    # 仅选择需要的字段，减少负载
     params = {
         "$select": "id,displayName,appId,passwordCredentials,keyCredentials",
         "$top": "999",
     }
     url = GRAPH_API_URL
 
+    expiring = []
+
     while url:
         resp = requests.get(url, headers=headers, params=params)
         resp.raise_for_status()
         data = resp.json()
 
-        for app in data.get("value", []):
-            name = app.get("displayName", "Unknown")
-            app_id = app.get("appId")
+        for app_obj in data.get("value", []):
+            name = app_obj.get("displayName", "Unknown")
+            app_id = app_obj.get("appId")
 
-            password_creds = app.get("passwordCredentials", []) or []
-            key_creds = app.get("keyCredentials", []) or []
+            password_creds = app_obj.get("passwordCredentials", []) or []
+            key_creds = app_obj.get("keyCredentials", []) or []
 
             has_password = len(password_creds) > 0
 
-            # 开关：隐藏“没有密码”的应用的条目（例如仅有证书的应用）
-            if not has_password and not SHOW_APPS_WITHOUT_PASSWORD:
+            # 开关：隐藏“没有密码”的应用（即便它有证书）
+            if not has_password and not show_without_password:
                 continue
 
-            # 检查“客户端密码”的到期时间
+            # 密码到期
             for cred in password_creds:
                 end_dt_str = cred.get("endDateTime")
                 if not end_dt_str:
@@ -130,15 +120,13 @@ def check_expiry():
                         "app_name": name,
                         "app_id": app_id,
                         "cred_name": cred.get("displayName") or "Unnamed",
-                        "expires_on": end_dt  # 暂存 datetime 便于排序
+                        "expires_on": end_dt  # datetime 临时用于排序
                     })
 
-            # 检查“证书”的到期时间（认证用途通常为 usage='Verify'）
+            # 证书到期（常见为 usage='Verify' 的认证证书；若想统计全部证书，去掉 usage 判断）
             for cert in key_creds:
-                # 如需只统计认证证书，可保留下面这一行；若要统计全部证书，注释掉此行
                 if cert.get("usage") and cert.get("usage") != "Verify":
                     continue
-
                 end_dt_str = cert.get("endDateTime")
                 if not end_dt_str:
                     continue
@@ -152,45 +140,174 @@ def check_expiry():
                         "app_name": name,
                         "app_id": app_id,
                         "cred_name": cert.get("displayName") or "Unnamed",
-                        "expires_on": end_dt  # 暂存 datetime 便于排序
+                        "expires_on": end_dt
                     })
 
-        # 分页
         next_link = data.get("@odata.nextLink")
         if next_link:
             url = next_link
-            params = None  # nextLink 已包含完整查询
+            params = None
         else:
             url = None
 
-    # 优先展示：Client Secret > Certificate；同类型按到期时间升序
+    # 排序：Client Secret 优先；同类型按到期时间近的在前
     type_weight = {"Client Secret": 0, "Certificate": 1}
     expiring.sort(key=lambda x: (type_weight.get(x["type"], 99), x["expires_on"]))
 
-    # 格式化时间为字符串
+    # 序列化时间
     for item in expiring:
         item["expires_on"] = item["expires_on"].isoformat()
 
     return expiring
 
-# ================================
-# 主函数
-# ================================
-def main():
-    print(f"🔍 检查未来 {EXPIRY_THRESHOLD_DAYS} 天内即将过期的应用凭据（应用注册的 证书 和 密码）...\n")
+# API：返回即将过期列表（支持 query 覆盖默认值）
+@app.get("/api/expiring")
+def api_expiring():
     try:
-        expiring = check_expiry()
-        if expiring:
-            print(f"⚠️ 发现 {len(expiring)} 个即将过期的凭据：\n")
-            for item in expiring:
-                print(f"- [{item['type']}] {item['app_name']} ({item['app_id']})")
-                print(f"  凭据名称: {item['cred_name']}")
-                print(f"  到期时间: {item['expires_on']}")
-                print()
+        days = request.args.get("days", type=int) or DEFAULT_EXPIRY_THRESHOLD_DAYS
+        show_without_pwd_param = request.args.get("showWithoutPassword")
+        if show_without_pwd_param is None:
+            show_without_pwd = DEFAULT_SHOW_APPS_WITHOUT_PASSWORD
         else:
-            print("✅ 所有应用凭据均安全，无近期过期项。")
+            show_without_pwd = show_without_pwd_param in ("1", "true", "True", "yes", "Y")
+
+        # 简单缓存命中判断
+        now = datetime.now().timestamp()
+        params_key = (days, show_without_pwd)
+        if (
+            CACHE["data"] is not None
+            and CACHE["params"] == params_key
+            and (now - CACHE["fetched_at"] < CACHE_TTL_SECONDS)
+        ):
+            return jsonify({"params": {"days": days, "showWithoutPassword": show_without_pwd}, "cached": True, "items": CACHE["data"]})
+
+        items = fetch_expiring(days, show_without_pwd)
+
+        CACHE["data"] = items
+        CACHE["fetched_at"] = now
+        CACHE["params"] = params_key
+
+        return jsonify({"params": {"days": days, "showWithoutPassword": show_without_pwd}, "cached": False, "items": items})
     except Exception as e:
-        print(f"❌ 错误: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# 网页：简单可视化（避免 f-string 与 JS 模板字面量冲突）
+@app.get("/")
+def index():
+    default_days = str(DEFAULT_EXPIRY_THRESHOLD_DAYS)
+    checked_attr = "checked" if DEFAULT_SHOW_APPS_WITHOUT_PASSWORD else ""
+
+    html = """
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>应用凭据到期监控</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, "Noto Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; margin: 20px; }
+  .row { margin-bottom: 12px; }
+  label { margin-right: 12px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #ddd; padding: 8px; }
+  th { background: #f5f5f5; position: sticky; top: 0; }
+  tr:nth-child(even) { background: #fafafa; }
+  .tag { display:inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; color: #fff; }
+  .secret { background:#0078d4; }
+  .cert { background:#8c8c8c; }
+  .warn { color:#b00020; font-weight: bold; }
+  .muted { color:#666; }
+</style>
+</head>
+<body>
+  <h2>应用凭据到期监控</h2>
+  <div class="row">
+    <label>检查天数：
+      <input type="number" id="days" min="1" value="__DAYS__" />
+    </label>
+    <label>
+      <input type="checkbox" id="showWithoutPwd" __CHECKED__ />
+      显示没有密码的应用
+    </label>
+    <button id="btnLoad">刷新</button>
+    <span id="status" class="muted"></span>
+  </div>
+
+  <table id="tbl">
+    <thead>
+      <tr>
+        <th>类型</th>
+        <th>应用名称</th>
+        <th>应用(客户端)ID</th>
+        <th>凭据名称</th>
+        <th>到期时间 (UTC)</th>
+        <th>剩余天数</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+<script>
+function fmtDaysLeft(iso) {
+  try {
+    const d = new Date(iso);
+    const now = new Date();
+    const diffMs = d - now;
+    const days = Math.floor(diffMs / 86400000); // 24*60*60*1000
+    return days;
+  } catch (e) {
+    return "";
+  }
+}
+
+async function loadData() {
+  const days = document.getElementById("days").value || "__DAYS__";
+  const show = document.getElementById("showWithoutPwd").checked ? 1 : 0;
+  const url = `/api/expiring?days=${encodeURIComponent(days)}&showWithoutPassword=${show}`;
+  const status = document.getElementById("status");
+  status.textContent = "加载中...";
+  try {
+    const r = await fetch(url);
+    const data = await r.json();
+    const tbody = document.querySelector("#tbl tbody");
+    tbody.innerHTML = "";
+    if (data.error) {
+      status.textContent = "错误：" + data.error;
+      return;
+    }
+    const items = data.items || [];
+    status.textContent = `共 ${items.length} 条${data.cached ? "（缓存）" : ""}`;
+    for (const it of items) {
+      const tr = document.createElement("tr");
+      const typeTag = it.type === "Client Secret"
+        ? '<span class="tag secret">Client Secret</span>'
+        : '<span class="tag cert">Certificate</span>';
+      const daysLeft = fmtDaysLeft(it.expires_on);
+      tr.innerHTML = `
+        <td>${typeTag}</td>
+        <td>${it.app_name || ""}</td>
+        <td>${it.app_id || ""}</td>
+        <td>${it.cred_name || ""}</td>
+        <td>${it.expires_on || ""}</td>
+        <td class="${(typeof daysLeft === "number" && daysLeft <= 30) ? "warn" : ""}">${isNaN(daysLeft) ? "" : daysLeft}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  } catch (e) {
+    status.textContent = "加载失败：" + e;
+  }
+}
+
+document.getElementById("btnLoad").addEventListener("click", loadData);
+window.addEventListener("load", loadData);
+</script>
+</body>
+</html>
+    """
+
+    html = html.replace("__DAYS__", default_days).replace("__CHECKED__", checked_attr)
+    return Response(html, mimetype="text/html")
 
 if __name__ == "__main__":
-    main()
+    # 生产环境请使用 WSGI（gunicorn 等）；此处便于本地调试
+    app.run(host="0.0.0.0", port=PORT, debug=False)

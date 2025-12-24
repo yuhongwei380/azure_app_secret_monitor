@@ -28,6 +28,7 @@ Directory (tenant) ID
 ```
 pip install msal requests cryptography 
 pip3 install python-dotenv
+pip3 install flask
 ```
 
 
