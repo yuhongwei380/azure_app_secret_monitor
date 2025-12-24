@@ -1,4 +1,0 @@
-AZURE_CLIENT_ID="5169f148-cc37-417a-9403-8728c1230a75"
-AZURE_TENANT_ID="1070a7e3-fecf-4e33-a37e-1ab42c17f353"
-CERT_FILE="./app_monitor_cert.pem"
-KEY_FILE="./app_monitor_key.pem"
