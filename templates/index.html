@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azure 应用凭据监控</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --primary-color: #0078d4;
+            --warning-color: #ff9800;
+            --danger-color: #f44336;
+            --success-color: #4caf50;
+            --light-bg: #f8f9fa;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .main-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            margin-top: 30px;
+            margin-bottom: 30px;
+            overflow: hidden;
+        }
+        
+        .header-section {
+            background: linear-gradient(to right, var(--primary-color), #005a9e);
+            color: white;
+            padding: 30px;
+            border-radius: 0 0 30px 30px;
+        }
+        
+        .stats-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            transition: transform 0.3s;
+            border-left: 5px solid var(--primary-color);
+        }
+        
+        .stats-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .stats-card.warning {
+            border-left-color: var(--warning-color);
+        }
+        
+        .stats-card.danger {
+            border-left-color: var(--danger-color);
+        }
+        
+        .credential-type {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .credential-secret {
+            background: rgba(0, 120, 212, 0.1);
+            color: var(--primary-color);
+        }
+        
+        .credential-cert {
+            background: rgba(108, 117, 125, 0.1);
+            color: #6c757d;
+        }
+        
+        .expiry-badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .expiry-critical {
+            background: rgba(244, 67, 54, 0.1);
+            color: var(--danger-color);
+        }
+        
+        .expiry-warning {
+            background: rgba(255, 152, 0, 0.1);
+            color: var(--warning-color);
+        }
+        
+        .expiry-safe {
+            background: rgba(76, 175, 80, 0.1);
+            color: var(--success-color);
+        }
+        
+        .table-container {
+            background: white;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+        
+        .filter-section {
+            background: var(--light-bg);
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .last-updated {
+            font-size: 12px;
+            color: #6c757d;
+        }
+        
+        .app-logo {
+            width: 40px;
+            height: 40px;
+            background: white;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+        }
+        
+        @media (max-width: 768px) {
+            .main-container {
+                border-radius: 0;
+                margin: 0;
+                min-height: 100vh;
+            }
+            
+            .header-section {
+                border-radius: 0;
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid main-container">
+        <!-- Header -->
+        <div class="header-section">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="app-logo">
+                            <i class="bi bi-shield-check text-primary" style="font-size: 24px;"></i>
+                        </div>
+                        <div>
+                            <h1 class="mb-0"><i class="bi bi-graph-up"></i> Azure 应用凭据监控</h1>
+                            <p class="mb-0 opacity-75">监控和管理 Azure AD 应用凭据的到期时间</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 text-end">
+                    <div class="last-updated" id="lastUpdated"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="container-fluid mt-4">
+            <div class="row g-4">
+                <div class="col-md-3">
+                    <div class="stats-card">
+                        <h6 class="text-muted mb-2"><i class="bi bi-calendar-x"></i> 即将到期总数</h6>
+                        <h2 class="mb-0" id="totalExpiring">0</h2>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card warning">
+                        <h6 class="text-muted mb-2"><i class="bi bi-key"></i> Client Secrets</h6>
+                        <h2 class="mb-0" id="totalSecrets">0</h2>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card">
+                        <h6 class="text-muted mb-2"><i class="bi bi-file-certificate"></i> Certificates</h6>
+                        <h2 class="mb-0" id="totalCerts">0</h2>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card danger">
+                        <h6 class="text-muted mb-2"><i class="bi bi-exclamation-triangle"></i> 7天内到期</h6>
+                        <h2 class="mb-0" id="criticalCount">0</h2>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter Section -->
+        <div class="container-fluid mt-4">
+            <div class="filter-section">
+                <div class="row align-items-center g-3">
+                    <div class="col-md-3">
+                        <label class="form-label"><i class="bi bi-calendar-range"></i> 检查天数</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="days" min="1" max="365" value="{{ default_days }}">
+                            <span class="input-group-text">天</span>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="showWithoutPwd" {{ "checked" if show_without_password else "" }}>
+                            <label class="form-check-label" for="showWithoutPwd">
+                                <i class="bi bi-eye"></i> 显示没有密码的应用
+                            </label>
+                        </div>
+                        <div class="form-check form-switch mt-2">
+                            <input class="form-check-input" type="checkbox" id="showExpired" checked>
+                            <label class="form-check-label" for="showExpired">
+                                <i class="bi bi-clock-history"></i> 显示已过期的凭据
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label"><i class="bi bi-filter"></i> 凭据类型</label>
+                        <select class="form-select" id="typeFilter">
+                            <option value="all">全部类型</option>
+                            <option value="Client Secret">仅 Client Secret</option>
+                            <option value="Certificate">仅 Certificate</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button class="btn btn-primary w-100" id="btnRefresh">
+                            <i class="bi bi-arrow-clockwise"></i> 刷新数据
+                        </button>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <div class="form-text">
+                            <i class="bi bi-info-circle"></i> 当前缓存有效期：{{ cache_ttl }} 秒 | 
+                            下次自动刷新：<span id="autoRefreshCountdown">300</span> 秒
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Table -->
+        <div class="container-fluid mt-4">
+            <div class="table-container">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" id="dataTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th><i class="bi bi-tag"></i> 类型</th>
+                                <th><i class="bi bi-app"></i> 应用名称</th>
+                                <th><i class="bi bi-hash"></i> 应用ID</th>
+                                <th><i class="bi bi-card-text"></i> 凭据名称</th>
+                                <th><i class="bi bi-calendar-event"></i> 到期时间 (UTC)</th>
+                                <th><i class="bi bi-clock"></i> 剩余天数</th>
+                                <th><i class="bi bi-activity"></i> 状态</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                            <!-- Data will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="table-footer p-3 border-top">
+                    <div class="row align-items-center">
+                        <div class="col-md-6">
+                            <div id="statusMessage" class="text-muted">
+                                <i class="bi bi-hourglass-split"></i> 正在加载数据...
+                            </div>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <div class="btn-group">
+                                <button class="btn btn-outline-secondary btn-sm" id="btnExport">
+                                    <i class="bi bi-download"></i> 导出 CSV
+                                </button>
+                                <button class="btn btn-outline-secondary btn-sm" id="btnCopy">
+                                    <i class="bi bi-clipboard"></i> 复制结果
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+            <div class="text-center">
+                <div class="spinner mb-3"></div>
+                <h5 class="text-white">正在获取数据...</h5>
+                <p class="text-white-50">请稍候</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        let currentData = [];
+        let autoRefreshInterval;
+        let countdownInterval;
+        let refreshCountdown = {{ cache_ttl }};
+
+        // 格式化剩余天数
+        function formatDaysLeft(iso) {
+            try {
+                const expiryDate = new Date(iso);
+                const now = new Date();
+                const diffMs = expiryDate - now;
+                const daysLeft = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                
+                if (daysLeft < 0) return { days: daysLeft, text: `已过期 ${Math.abs(daysLeft)} 天`, class: 'expiry-critical' };
+                if (daysLeft <= 7) return { days: daysLeft, text: `${daysLeft} 天`, class: 'expiry-critical' };
+                if (daysLeft <= 30) return { days: daysLeft, text: `${daysLeft} 天`, class: 'expiry-warning' };
+                return { days: daysLeft, text: `${daysLeft} 天`, class: 'expiry-safe' };
+            } catch (e) {
+                return { days: null, text: "N/A", class: '' };
+            }
+        }
+
+        // 更新统计数据
+        function updateStats(data) {
+            const total = data.length;
+            const secrets = data.filter(item => item.type === 'Client Secret').length;
+            const certs = data.filter(item => item.type === 'Certificate').length;
+            const critical = data.filter(item => {
+                const daysLeft = formatDaysLeft(item.expires_on).days;
+                return daysLeft !== null && daysLeft <= 7;
+            }).length;
+
+            document.getElementById('totalExpiring').textContent = total;
+            document.getElementById('totalSecrets').textContent = secrets;
+            document.getElementById('totalCerts').textContent = certs;
+            document.getElementById('criticalCount').textContent = critical;
+        }
+
+        // 渲染表格
+        function renderTable(data) {
+            const tbody = document.getElementById('tableBody');
+            const typeFilter = document.getElementById('typeFilter').value;
+            const showExpired = document.getElementById('showExpired').checked;
+            
+            let filteredData = data;
+            
+            // 应用类型过滤器
+            if (typeFilter !== 'all') {
+                filteredData = filteredData.filter(item => item.type === typeFilter);
+            }
+            
+            // 应用过期过滤器
+            if (!showExpired) {
+                filteredData = filteredData.filter(item => {
+                    const daysLeft = formatDaysLeft(item.expires_on).days;
+                    return daysLeft === null || daysLeft >= 0;
+                });
+            }
+            
+            tbody.innerHTML = '';
+            
+            if (filteredData.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="text-center py-5">
+                            <i class="bi bi-check-circle" style="font-size: 48px; color: var(--success-color);"></i>
+                            <h5 class="mt-3">没有找到符合条件的凭据</h5>
+                            <p class="text-muted">尝试调整筛选条件</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            filteredData.forEach(item => {
+                const daysInfo = formatDaysLeft(item.expires_on);
+                const typeClass = item.type === 'Client Secret' ? 'credential-secret' : 'credential-cert';
+                const typeIcon = item.type === 'Client Secret' ? 'bi-key' : 'bi-file-certificate';
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>
+                        <span class="credential-type ${typeClass}">
+                            <i class="bi ${typeIcon} me-1"></i>${item.type}
+                        </span>
+                    </td>
+                    <td>
+                        <strong>${item.app_name || '未命名'}</strong>
+                    </td>
+                    <td>
+                        <code class="bg-light p-1 rounded">${item.app_id || ''}</code>
+                    </td>
+                    <td>
+                        <i class="bi bi-tag me-1"></i>${item.cred_name || '未命名'}
+                    </td>
+                    <td>
+                        <i class="bi bi-calendar3 me-1"></i>${item.expires_on || ''}
+                    </td>
+                    <td>
+                        <span class="expiry-badge ${daysInfo.class}">
+                            <i class="bi bi-clock me-1"></i>${daysInfo.text}
+                        </span>
+                    </td>
+                    <td>
+                        ${daysInfo.days !== null && daysInfo.days <= 7 ? 
+                          '<span class="badge bg-danger"><i class="bi bi-exclamation-triangle me-1"></i>需立即处理</span>' :
+                          daysInfo.days !== null && daysInfo.days <= 30 ?
+                          '<span class="badge bg-warning"><i class="bi bi-exclamation-circle me-1"></i>需关注</span>' :
+                          '<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>正常</span>'}
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // 加载数据
+        async function loadData(showLoading = true) {
+            if (showLoading) {
+                document.getElementById('loadingOverlay').style.display = 'flex';
+            }
+            
+            const days = document.getElementById('days').value;
+            const showWithoutPwd = document.getElementById('showWithoutPwd').checked ? 1 : 0;
+            
+            try {
+                const response = await fetch(`/api/expiring?days=${encodeURIComponent(days)}&showWithoutPassword=${showWithoutPwd}`);
+                const result = await response.json();
+                
+                if (result.error) {
+                    showNotification('错误: ' + result.error, 'danger');
+                    return;
+                }
+                
+                currentData = result.items || [];
+                
+                // 更新统计和表格
+                updateStats(currentData);
+                renderTable(currentData);
+                
+                // 更新状态信息
+                const statusEl = document.getElementById('statusMessage');
+                const now = new Date();
+                const timeStr = now.toLocaleTimeString();
+                statusEl.innerHTML = `<i class="bi bi-check-circle text-success"></i> 
+                    ${result.cached ? '已加载缓存数据' : '数据加载成功'} | 
+                    共 ${currentData.length} 条记录 | 
+                    更新时间: ${timeStr}`;
+                
+                // 更新最后更新时间
+                document.getElementById('lastUpdated').textContent = `最后更新: ${timeStr}`;
+                
+                // 重置自动刷新倒计时
+                resetAutoRefresh();
+                
+            } catch (error) {
+                showNotification('加载失败: ' + error.message, 'danger');
+            } finally {
+                if (showLoading) {
+                    document.getElementById('loadingOverlay').style.display = 'none';
+                }
+            }
+        }
+
+        // 显示通知
+        function showNotification(message, type = 'info') {
+            const alertClass = {
+                'success': 'alert-success',
+                'danger': 'alert-danger',
+                'warning': 'alert-warning',
+                'info': 'alert-info'
+            }[type] || 'alert-info';
+            
+            const alert = document.createElement('div');
+            alert.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
+            alert.style.cssText = 'top: 20px; right: 20px; z-index: 1050; min-width: 300px;';
+            alert.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            
+            document.body.appendChild(alert);
+            
+            // 自动移除通知
+            setTimeout(() => {
+                alert.remove();
+            }, 5000);
+        }
+
+        // 导出CSV
+        function exportToCSV() {
+            if (currentData.length === 0) {
+                showNotification('没有数据可导出', 'warning');
+                return;
+            }
+            
+            const headers = ['类型', '应用名称', '应用ID', '凭据名称', '到期时间', '剩余天数'];
+            const csvRows = [headers.join(',')];
+            
+            currentData.forEach(item => {
+                const daysInfo = formatDaysLeft(item.expires_on);
+                const row = [
+                    `"${item.type}"`,
+                    `"${item.app_name || ''}"`,
+                    `"${item.app_id || ''}"`,
+                    `"${item.cred_name || ''}"`,
+                    `"${item.expires_on || ''}"`,
+                    daysInfo.days !== null ? daysInfo.days : 'N/A'
+                ];
+                csvRows.push(row.join(','));
+            });
+            
+            const csvContent = csvRows.join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `azure_credentials_${new Date().toISOString().split('T')[0]}.csv`;
+            link.click();
+            URL.revokeObjectURL(url);
+            
+            showNotification('CSV文件已导出', 'success');
+        }
+
+        // 复制结果到剪贴板
+        function copyResults() {
+            if (currentData.length === 0) {
+                showNotification('没有数据可复制', 'warning');
+                return;
+            }
+            
+            const text = currentData.map(item => 
+                `${item.type}: ${item.app_name} (${item.app_id}) - ${item.cred_name} 到期: ${item.expires_on}`
+            ).join('\n');
+            
+            navigator.clipboard.writeText(text).then(() => {
+                showNotification('结果已复制到剪贴板', 'success');
+            }).catch(err => {
+                showNotification('复制失败: ' + err.message, 'danger');
+            });
+        }
+
+        // 重置自动刷新
+        function resetAutoRefresh() {
+            refreshCountdown = {{ cache_ttl }};
+            clearInterval(countdownInterval);
+            
+            countdownInterval = setInterval(() => {
+                refreshCountdown--;
+                document.getElementById('autoRefreshCountdown').textContent = refreshCountdown;
+                
+                if (refreshCountdown <= 0) {
+                    loadData(false); // 静默刷新
+                    refreshCountdown = {{ cache_ttl }};
+                }
+            }, 1000);
+        }
+
+        // 事件监听
+        document.addEventListener('DOMContentLoaded', () => {
+            // 初始加载
+            loadData();
+            
+            // 绑定按钮事件
+            document.getElementById('btnRefresh').addEventListener('click', () => loadData(true));
+            document.getElementById('btnExport').addEventListener('click', exportToCSV);
+            document.getElementById('btnCopy').addEventListener('click', copyResults);
+            
+            // 绑定筛选器事件
+            document.getElementById('typeFilter').addEventListener('change', () => renderTable(currentData));
+            document.getElementById('showExpired').addEventListener('change', () => renderTable(currentData));
+            document.getElementById('days').addEventListener('change', () => loadData(true));
+            document.getElementById('showWithoutPwd').addEventListener('change', () => loadData(true));
+            
+            // 键盘快捷键
+            document.addEventListener('keydown', (e) => {
+                if (e.ctrlKey && e.key === 'r') {
+                    e.preventDefault();
+                    loadData(true);
+                }
+                if (e.ctrlKey && e.key === 'e') {
+                    e.preventDefault();
+                    exportToCSV();
+                }
+            });
+        });
+
+        // 页面可见性变化时刷新数据
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                loadData(false);
+            }
+        });
+    </script>
+</body>
+</html>
