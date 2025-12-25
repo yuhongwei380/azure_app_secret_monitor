@@ -1,12 +1,15 @@
+操作步骤
+一、生成密钥
+```
 # 生成私钥
 openssl genrsa -out app_monitor_key.pem 2048
 
 # 生成公钥证书（有效期10年）
 openssl req -new -x509 -key app_monitor_key.pem -out app_monitor_cert.pem -days 3650
+```
 
 
-
-操作步骤：
+二、Azure 配置
 ```
 1.登录 Azure Portal
 2.进入 Microsoft Entra ID > 应用注册 > 新注册
@@ -25,11 +28,25 @@ Application (client) ID
 Directory (tenant) ID
 ```
 
+三、克隆代码&Python运行
+3.1 git clone
+```
+git clone https://github.com/yuhongwei380/Azure_app_monitor
+```
+3.2 修改env
+
+
+3.3 安装运行环境
 ```
 pip install msal requests cryptography 
 pip3 install python-dotenv
 pip3 install flask
 pip install -r requirements.txt
+```
+3.4 python 运行
+
+```
+python3 azure_app_monitor.py
 ```
 
 
