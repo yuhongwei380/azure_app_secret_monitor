@@ -289,7 +289,6 @@
                             </tr>
                         </thead>
                         <tbody id="tableBody">
-                            <!-- Data will be populated here -->
                         </tbody>
                     </table>
                 </div>
@@ -315,6 +314,82 @@
             </div>
         </div>
 
+        <!-- Alert Configuration Panel (BELOW TABLE) -->
+        <div class="container-fluid mt-4">
+            <div class="filter-section">
+                <h5 class="mb-3"><i class="bi bi-bell"></i> 钉钉告警通知设置</h5>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">钉钉 Webhook URL</label>
+                        <input type="text" class="form-control" id="dingtalkWebhook" placeholder="https://oapi.dingtalk.com/robot/send?access_token=xxx">
+                        <div class="form-text">
+                            <i class="bi bi-info-circle"></i> 从钉钉机器人设置中复制完整 URL
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">加签密钥（可选）</label>
+                        <input type="text" class="form-control" id="dingtalkSecret" placeholder="SECxxxxxxxxxxxxxx">
+                        <div class="form-text">
+                            <i class="bi bi-shield-lock"></i> 如果启用了“加签”，请填写密钥；否则留空
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">告警周期（天）</label>
+                        <input type="number" class="form-control" id="alertDays" min="1" max="365" value="30">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">检查间隔（小时）</label>
+                        <input type="number" class="form-control" id="alertInterval" min="1" max="168" value="24">
+                        <div class="form-text">多久检查一次凭据</div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">最小重发间隔（小时）</label>
+                        <input type="number" class="form-control" id="minAlertInterval" min="1" max="168" value="24">
+                        <div class="form-text">相同凭据至少间隔 N 小时才重复告警</div>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <div class="btn-group w-100">
+                            <button class="btn btn-success" id="btnSaveAlert">
+                                <i class="bi bi-save"></i> 保存
+                            </button>
+                            <button class="btn btn-outline-primary" id="btnTriggerAlert">
+                                <i class="bi bi-bell-fill"></i> 立即告警（强制）
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ignored Apps (Enhanced) -->
+                <div class="mt-4">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6><i class="bi bi-eye-slash"></i> 忽略的应用（整个应用不告警）</h6>
+                        <button class="btn btn-outline-secondary btn-sm" id="btnAddIgnore">
+                            <i class="bi bi-plus"></i> 添加应用ID
+                        </button>
+                    </div>
+                    <div class="table-responsive mt-2">
+                        <table class="table table-sm" id="ignoredTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th><i class="bi bi-tag"></i> 类型</th>
+                                    <th><i class="bi bi-app"></i> 应用名称</th>
+                                    <th><i class="bi bi-hash"></i> 应用ID</th>
+                                    <th><i class="bi bi-card-text"></i> 凭据名称</th>
+                                    <th><i class="bi bi-calendar-event"></i> 到期时间 (UTC)</th>
+                                    <th><i class="bi bi-clock"></i> 剩余天数</th>
+                                    <th><i class="bi bi-trash"></i> 操作</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <div class="text-muted mt-2" id="ignoredHint">
+                        提示：忽略按 App ID 生效，将屏蔽该应用下所有凭据的告警
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Loading Overlay -->
         <div class="loading-overlay" id="loadingOverlay" style="display: none;">
             <div class="text-center">
@@ -326,21 +401,16 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         let currentData = [];
-        let autoRefreshInterval;
-        let countdownInterval;
         let refreshCountdown = {{ cache_ttl }};
 
-        // 格式化剩余天数
         function formatDaysLeft(iso) {
             try {
                 const expiryDate = new Date(iso);
                 const now = new Date();
                 const diffMs = expiryDate - now;
                 const daysLeft = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-                
                 if (daysLeft < 0) return { days: daysLeft, text: `已过期 ${Math.abs(daysLeft)} 天`, class: 'expiry-critical' };
                 if (daysLeft <= 7) return { days: daysLeft, text: `${daysLeft} 天`, class: 'expiry-critical' };
                 if (daysLeft <= 30) return { days: daysLeft, text: `${daysLeft} 天`, class: 'expiry-warning' };
@@ -350,7 +420,6 @@
             }
         }
 
-        // 更新统计数据
         function updateStats(data) {
             const total = data.length;
             const secrets = data.filter(item => item.type === 'Client Secret').length;
@@ -366,20 +435,15 @@
             document.getElementById('criticalCount').textContent = critical;
         }
 
-        // 渲染表格
         function renderTable(data) {
             const tbody = document.getElementById('tableBody');
             const typeFilter = document.getElementById('typeFilter').value;
             const showExpired = document.getElementById('showExpired').checked;
             
             let filteredData = data;
-            
-            // 应用类型过滤器
             if (typeFilter !== 'all') {
                 filteredData = filteredData.filter(item => item.type === typeFilter);
             }
-            
-            // 应用过期过滤器
             if (!showExpired) {
                 filteredData = filteredData.filter(item => {
                     const daysLeft = formatDaysLeft(item.expires_on).days;
@@ -388,7 +452,6 @@
             }
             
             tbody.innerHTML = '';
-            
             if (filteredData.length === 0) {
                 tbody.innerHTML = `
                     <tr>
@@ -406,7 +469,6 @@
                 const daysInfo = formatDaysLeft(item.expires_on);
                 const typeClass = item.type === 'Client Secret' ? 'credential-secret' : 'credential-cert';
                 const typeIcon = item.type === 'Client Secret' ? 'bi-key' : 'bi-file-certificate';
-                
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>
@@ -443,45 +505,28 @@
             });
         }
 
-        // 加载数据
         async function loadData(showLoading = true) {
             if (showLoading) {
                 document.getElementById('loadingOverlay').style.display = 'flex';
             }
-            
             const days = document.getElementById('days').value;
             const showWithoutPwd = document.getElementById('showWithoutPwd').checked ? 1 : 0;
-            
             try {
                 const response = await fetch(`/api/expiring?days=${encodeURIComponent(days)}&showWithoutPassword=${showWithoutPwd}`);
                 const result = await response.json();
-                
                 if (result.error) {
                     showNotification('错误: ' + result.error, 'danger');
                     return;
                 }
-                
                 currentData = result.items || [];
-                
-                // 更新统计和表格
                 updateStats(currentData);
                 renderTable(currentData);
-                
-                // 更新状态信息
-                const statusEl = document.getElementById('statusMessage');
                 const now = new Date();
                 const timeStr = now.toLocaleTimeString();
-                statusEl.innerHTML = `<i class="bi bi-check-circle text-success"></i> 
-                    ${result.cached ? '已加载缓存数据' : '数据加载成功'} | 
-                    共 ${currentData.length} 条记录 | 
-                    更新时间: ${timeStr}`;
-                
-                // 更新最后更新时间
+                document.getElementById('statusMessage').innerHTML = `<i class="bi bi-check-circle text-success"></i> 
+                    ${result.cached ? '已加载缓存数据' : '数据加载成功'} | 共 ${currentData.length} 条记录 | 更新时间: ${timeStr}`;
                 document.getElementById('lastUpdated').textContent = `最后更新: ${timeStr}`;
-                
-                // 重置自动刷新倒计时
                 resetAutoRefresh();
-                
             } catch (error) {
                 showNotification('加载失败: ' + error.message, 'danger');
             } finally {
@@ -491,7 +536,6 @@
             }
         }
 
-        // 显示通知
         function showNotification(message, type = 'info') {
             const alertClass = {
                 'success': 'alert-success',
@@ -499,33 +543,21 @@
                 'warning': 'alert-warning',
                 'info': 'alert-info'
             }[type] || 'alert-info';
-            
             const alert = document.createElement('div');
             alert.className = `alert ${alertClass} alert-dismissible fade show position-fixed`;
             alert.style.cssText = 'top: 20px; right: 20px; z-index: 1050; min-width: 300px;';
-            alert.innerHTML = `
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            `;
-            
+            alert.innerHTML = `${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
             document.body.appendChild(alert);
-            
-            // 自动移除通知
-            setTimeout(() => {
-                alert.remove();
-            }, 5000);
+            setTimeout(() => alert.remove(), 5000);
         }
 
-        // 导出CSV
         function exportToCSV() {
             if (currentData.length === 0) {
                 showNotification('没有数据可导出', 'warning');
                 return;
             }
-            
             const headers = ['类型', '应用名称', '应用ID', '凭据名称', '到期时间', '剩余天数'];
             const csvRows = [headers.join(',')];
-            
             currentData.forEach(item => {
                 const daysInfo = formatDaysLeft(item.expires_on);
                 const row = [
@@ -538,7 +570,6 @@
                 ];
                 csvRows.push(row.join(','));
             });
-            
             const csvContent = csvRows.join('\n');
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
@@ -547,21 +578,17 @@
             link.download = `azure_credentials_${new Date().toISOString().split('T')[0]}.csv`;
             link.click();
             URL.revokeObjectURL(url);
-            
             showNotification('CSV文件已导出', 'success');
         }
 
-        // 复制结果到剪贴板
         function copyResults() {
             if (currentData.length === 0) {
                 showNotification('没有数据可复制', 'warning');
                 return;
             }
-            
             const text = currentData.map(item => 
                 `${item.type}: ${item.app_name} (${item.app_id}) - ${item.cred_name} 到期: ${item.expires_on}`
             ).join('\n');
-            
             navigator.clipboard.writeText(text).then(() => {
                 showNotification('结果已复制到剪贴板', 'success');
             }).catch(err => {
@@ -569,56 +596,209 @@
             });
         }
 
-        // 重置自动刷新
         function resetAutoRefresh() {
             refreshCountdown = {{ cache_ttl }};
-            clearInterval(countdownInterval);
-            
-            countdownInterval = setInterval(() => {
+            clearInterval(window.countdownInterval);
+            window.countdownInterval = setInterval(() => {
                 refreshCountdown--;
                 document.getElementById('autoRefreshCountdown').textContent = refreshCountdown;
-                
                 if (refreshCountdown <= 0) {
-                    loadData(false); // 静默刷新
+                    loadData(false);
                     refreshCountdown = {{ cache_ttl }};
                 }
             }, 1000);
         }
 
-        // 事件监听
-        document.addEventListener('DOMContentLoaded', () => {
-            // 初始加载
-            loadData();
+        // ========== 告警配置 ==========
+        async function loadAlertConfig() {
+            try {
+                // 加载配置
+                const configRes = await fetch('/api/alert/config');
+                const config = await configRes.json();
+                document.getElementById('dingtalkWebhook').value = config.dingtalk_webhook || '';
+                document.getElementById('dingtalkSecret').value = config.dingtalk_secret || '';
+                document.getElementById('alertDays').value = config.alert_threshold_days || 30;
+                document.getElementById('alertInterval').value = config.alert_check_interval_hours || 24;
+                document.getElementById('minAlertInterval').value = config.min_alert_interval_hours || 24;
+
+                // 单独加载忽略列表（带完整凭据信息）
+                const ignoredRes = await fetch('/api/alert/ignored');
+                const ignoredItems = await ignoredRes.json();
+                renderIgnoredTable(ignoredItems);
+            } catch (err) {
+                showNotification('加载告警配置失败: ' + err.message, 'danger');
+            }
+        }
+
+        async function saveAlertConfig() {
+            const webhook = document.getElementById('dingtalkWebhook').value.trim();
+            const secret = document.getElementById('dingtalkSecret').value.trim();
+            const days = parseInt(document.getElementById('alertDays').value) || 30;
+            const interval = parseInt(document.getElementById('alertInterval').value) || 24;
+            const minInterval = parseInt(document.getElementById('minAlertInterval').value) || 24;
+            try {
+                const res = await fetch('/api/alert/config', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        dingtalk_webhook: webhook,
+                        dingtalk_secret: secret,
+                        alert_threshold_days: days,
+                        alert_check_interval_hours: interval,
+                        min_alert_interval_hours: minInterval
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '未知错误');
+                showNotification('告警配置保存成功', 'success');
+            } catch (err) {
+                showNotification('保存失败: ' + err.message, 'danger');
+            }
+        }
+
+        async function triggerAlert() {
+            try {
+                const res = await fetch('/api/alert/trigger', { method: 'POST' });
+                const data = await res.json();
+                if (res.ok) {
+                    if (data.status === 'success') {
+                        showNotification(`✅ ${data.message}`, 'success');
+                    } else if (data.status === 'no_alert') {
+                        showNotification('ℹ️ ' + data.message, 'info');
+                    } else if (data.status === 'skipped') {
+                        showNotification('⏭️ ' + data.message, 'warning');
+                    }
+                } else {
+                    throw new Error(data.message || '触发失败');
+                }
+            } catch (err) {
+                showNotification('❌ ' + err.message, 'danger');
+            }
+        }
+
+        function renderIgnoredTable(ignoredItems) {
+            const tbody = document.querySelector('#ignoredTable tbody');
+            tbody.innerHTML = '';
             
-            // 绑定按钮事件
+            if (!Array.isArray(ignoredItems) || ignoredItems.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">暂无忽略应用</td></tr>';
+                return;
+            }
+
+            // 按 app_id 分组（可选，但这里直接展示每条凭据）
+            ignoredItems.forEach(item => {
+                // 处理可能的降级数据（只有 app_id）
+                if (!item.expires_on) {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td colspan="6">App ID: <code>${item.app_id}</code>（凭据数据加载失败）</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-danger remove-ignore" data-app-id="${item.app_id}">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                    return;
+                }
+
+                const daysInfo = formatDaysLeft(item.expires_on);
+                const typeClass = item.type === 'Client Secret' ? 'credential-secret' : 'credential-cert';
+                const typeIcon = item.type === 'Client Secret' ? 'bi-key' : 'bi-file-certificate';
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>
+                        <span class="credential-type ${typeClass}">
+                            <i class="bi ${typeIcon} me-1"></i>${item.type}
+                        </span>
+                    </td>
+                    <td>${item.app_name || '未命名'}</td>
+                    <td><code>${item.app_id}</code></td>
+                    <td>${item.cred_name || '未命名'}</td>
+                    <td>${item.expires_on}</td>
+                    <td>
+                        <span class="expiry-badge ${daysInfo.class}">
+                            ${daysInfo.text}
+                        </span>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-danger remove-ignore" data-app-id="${item.app_id}">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            // 重新绑定删除事件
+            document.querySelectorAll('.remove-ignore').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const app_id = btn.dataset.appId;
+                    try {
+                        const res = await fetch('/api/alert/ignored', {
+                            method: 'DELETE',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({app_id})
+                        });
+                        if (!res.ok) throw new Error('删除失败');
+                        loadAlertConfig(); // 会重新加载忽略列表
+                        showNotification('已移除忽略应用', 'success');
+                    } catch (err) {
+                        showNotification('移除失败: ' + err.message, 'danger');
+                    }
+                });
+            });
+        }
+
+        document.getElementById('btnAddIgnore').addEventListener('click', () => {
+            const app_id = prompt('请输入要忽略的 Azure 应用ID (App ID):');
+            if (!app_id) return;
+            const trimmed = app_id.trim();
+            const uuidRegex = /^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$/;
+            if (!uuidRegex.test(trimmed)) {
+                showNotification('应用ID格式无效（应为标准 UUID）', 'warning');
+                return;
+            }
+            (async () => {
+                try {
+                    const res = await fetch('/api/alert/ignored', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({app_id: trimmed})
+                    });
+                    if (!res.ok) throw new Error('添加失败');
+                    loadAlertConfig();
+                    showNotification('已添加忽略应用', 'success');
+                } catch (err) {
+                    showNotification('添加失败: ' + err.message, 'danger');
+                }
+            })();
+        });
+
+        document.getElementById('btnSaveAlert').addEventListener('click', saveAlertConfig);
+        document.getElementById('btnTriggerAlert').addEventListener('click', triggerAlert);
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            loadData();
+            loadAlertConfig();
+
             document.getElementById('btnRefresh').addEventListener('click', () => loadData(true));
             document.getElementById('btnExport').addEventListener('click', exportToCSV);
             document.getElementById('btnCopy').addEventListener('click', copyResults);
-            
-            // 绑定筛选器事件
             document.getElementById('typeFilter').addEventListener('change', () => renderTable(currentData));
             document.getElementById('showExpired').addEventListener('change', () => renderTable(currentData));
             document.getElementById('days').addEventListener('change', () => loadData(true));
             document.getElementById('showWithoutPwd').addEventListener('change', () => loadData(true));
-            
-            // 键盘快捷键
-            document.addEventListener('keydown', (e) => {
-                if (e.ctrlKey && e.key === 'r') {
-                    e.preventDefault();
-                    loadData(true);
-                }
-                if (e.ctrlKey && e.key === 'e') {
-                    e.preventDefault();
-                    exportToCSV();
-                }
+
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) loadData(false);
             });
         });
 
-        // 页面可见性变化时刷新数据
-        document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) {
-                loadData(false);
-            }
+        window.addEventListener('beforeunload', () => {
+            if (window.countdownInterval) clearInterval(window.countdownInterval);
         });
     </script>
 </body>
