@@ -6,8 +6,8 @@ openssl req -new -x509 -key app_monitor_key.pem -out app_monitor_cert.pem -days 
 
 
 
-
-
+操作步骤：
+```
 1.登录 Azure Portal
 2.进入 Microsoft Entra ID > 应用注册 > 新注册
     名称：App-Credential-Monitor
@@ -23,12 +23,13 @@ openssl req -new -x509 -key app_monitor_key.pem -out app_monitor_cert.pem -days 
 6.记下：
 Application (client) ID
 Directory (tenant) ID
-
+```
 
 ```
 pip install msal requests cryptography 
 pip3 install python-dotenv
 pip3 install flask
+pip install -r requirements.txt
 ```
 
 
