@@ -1,12 +1,18 @@
 import os
 import msal
 import requests
+import json
+import threading
+import time
+import hmac
+import hashlib
+import base64
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from cryptography.hazmat.primitives import hashes
 from dotenv import load_dotenv
 import jwt
-from flask import Flask, request, jsonify, render_template, Response
-import time
+from flask import Flask, request, jsonify, render_template
 
 # 加载 .env
 load_dotenv()
@@ -24,6 +30,10 @@ PORT = int(os.getenv("PORT", "8000"))
 DEBUG_TOKEN = os.getenv("DEBUG_TOKEN", "0") == "1"
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
 
+# 告警相关配置文件
+ALERT_CONFIG_FILE = Path("alert_config.json")
+LAST_ALERTED_FILE = Path("last_alerted.json")
+
 AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
 GRAPH_API_SCOPE = ["https://graph.microsoft.com/.default"]
 GRAPH_API_URL = "https://graph.microsoft.com/v1.0/applications"
@@ -38,7 +48,7 @@ class Cache:
         self.fetched_at = 0
         self.params = None
         self.ttl = CACHE_TTL_SECONDS
-    
+
     def is_valid(self, params):
         current_time = time.time()
         return (
@@ -46,7 +56,7 @@ class Cache:
             and self.params == params
             and (current_time - self.fetched_at) < self.ttl
         )
-    
+
     def update(self, data, params):
         self.data = data
         self.fetched_at = time.time()
@@ -54,7 +64,108 @@ class Cache:
 
 CACHE = Cache()
 
-# 从证书文件提取 thumbprint
+# === 告警配置工具函数 ===
+def load_alert_config():
+    if ALERT_CONFIG_FILE.exists():
+        try:
+            with open(ALERT_CONFIG_FILE, "r", encoding="utf-8") as f:
+                config = json.load(f)
+                config.setdefault("dingtalk_webhook", "")
+                config.setdefault("dingtalk_secret", "")
+                config.setdefault("alert_threshold_days", 30)
+                config.setdefault("alert_check_interval_hours", 24)
+                config.setdefault("min_alert_interval_hours", 24)  # 最小重发间隔（小时）
+                config.setdefault("ignored_app_ids", [])
+                return config
+        except Exception as e:
+            print(f"加载告警配置失败: {e}")
+    return {
+        "dingtalk_webhook": "",
+        "dingtalk_secret": "",
+        "alert_threshold_days": 30,
+        "alert_check_interval_hours": 24,
+        "min_alert_interval_hours": 24,
+        "ignored_app_ids": []
+    }
+
+def save_alert_config(config):
+    try:
+        with open(ALERT_CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"保存告警配置失败: {e}")
+
+def load_last_alerted_times():
+    """加载上次告警时间，兼容旧版 list 格式"""
+    if LAST_ALERTED_FILE.exists():
+        try:
+            with open(LAST_ALERTED_FILE, "r") as f:
+                data = json.load(f)
+            
+            # 兼容旧版 list 格式
+            if isinstance(data, list):
+                print("检测到旧版 last_alerted.json，正在迁移为新格式...")
+                now = datetime.now(timezone.utc).isoformat()
+                new_data = {f"{item[0]}|{item[1]}": now for item in data if isinstance(item, list) and len(item) == 2}
+                save_last_alerted_times(new_data)
+                return new_data
+            elif isinstance(data, dict):
+                return data
+            else:
+                print("last_alerted.json 格式异常，使用空配置")
+                return {}
+        except Exception as e:
+            print(f"加载告警时间失败: {e}")
+    return {}
+
+def save_last_alerted_times(data):
+    try:
+        with open(LAST_ALERTED_FILE, "w") as f:
+            json.dump(data, f)
+    except Exception as e:
+        print(f"保存告警时间失败: {e}")
+
+def sign_dingtalk(secret, timestamp):
+    if not secret:
+        return ""
+    string_to_sign = f"{timestamp}\n{secret}"
+    hmac_code = hmac.new(
+        secret.encode("utf-8"),
+        string_to_sign.encode("utf-8"),
+        hashlib.sha256
+    ).digest()
+    sign = base64.b64encode(hmac_code).decode("utf-8")
+    return sign
+
+def send_dingtalk_message(webhook_url, message, secret=""):
+    if not webhook_url or not message:
+        return False
+    try:
+        timestamp = str(int(time.time() * 1000))
+        headers = {"Content-Type": "application/json"}
+        data = {"msgtype": "text", "text": {"content": message}}
+
+        if secret:
+            from urllib.parse import urlparse, parse_qs
+            parsed = urlparse(webhook_url)
+            query = parse_qs(parsed.query)
+            token = query.get("access_token", [None])[0]
+            if not token:
+                raise ValueError("Webhook URL 中缺少 access_token")
+            url = f"https://oapi.dingtalk.com/robot/send?access_token={token}&timestamp={timestamp}&sign={sign_dingtalk(secret, timestamp)}"
+        else:
+            url = webhook_url
+
+        resp = requests.post(url, json=data, headers=headers, timeout=10)
+        success = resp.status_code == 200
+        if not success:
+            print(f"钉钉返回错误: {resp.text}")
+        return success
+    except Exception as e:
+        print(f"钉钉消息发送失败: {e}")
+        return False
+
+# === Azure 相关函数 ===
 def get_cert_thumbprint(cert_path):
     from cryptography import x509
     from cryptography.hazmat.backends import default_backend
@@ -67,7 +178,6 @@ def get_cert_thumbprint(cert_path):
     thumbprint = cert.fingerprint(hashes.SHA1()).hex().upper()
     return thumbprint
 
-# 获取访问令牌
 def get_access_token():
     thumbprint = get_cert_thumbprint(CERT_PATH)
     with open(KEY_PATH, "r") as f:
@@ -94,7 +204,6 @@ def get_access_token():
     else:
         raise Exception(f"获取令牌失败: {result.get('error_description', result)}")
 
-# 查询并整理即将过期的凭据
 def fetch_expiring(threshold_days: int, show_without_password: bool):
     token = get_access_token()
     headers = {"Authorization": f"Bearer {token}"}
@@ -126,7 +235,6 @@ def fetch_expiring(threshold_days: int, show_without_password: bool):
             if not has_password and not show_without_password:
                 continue
 
-            # 密码到期
             for cred in password_creds:
                 end_dt_str = cred.get("endDateTime")
                 if not end_dt_str:
@@ -144,7 +252,6 @@ def fetch_expiring(threshold_days: int, show_without_password: bool):
                         "expires_on": end_dt
                     })
 
-            # 证书到期
             for cert in key_creds:
                 if cert.get("usage") and cert.get("usage") != "Verify":
                     continue
@@ -171,17 +278,94 @@ def fetch_expiring(threshold_days: int, show_without_password: bool):
         else:
             url = None
 
-    # 排序
     type_weight = {"Client Secret": 0, "Certificate": 1}
     expiring.sort(key=lambda x: (type_weight.get(x["type"], 99), x["expires_on"]))
 
-    # 序列化时间
     for item in expiring:
         item["expires_on"] = item["expires_on"].isoformat()
 
     return expiring
 
-# API 端点
+# === 核心告警逻辑 ===
+def perform_alert_check_and_send(force=False):
+    """
+    执行告警检查
+    :param force: 如果为 True，忽略最小告警间隔，强制发送
+    """
+    config = load_alert_config()
+    webhook = config.get("dingtalk_webhook", "").strip()
+    secret = config.get("dingtalk_secret", "").strip()
+    threshold = config.get("alert_threshold_days", 30)
+    min_interval = config.get("min_alert_interval_hours", 24)  # 单位：小时
+
+    if not webhook:
+        return {"status": "skipped", "message": "未配置钉钉 Webhook"}
+
+    try:
+        items = fetch_expiring(threshold, show_without_password=True)
+        ignored_app_ids = set(config.get("ignored_app_ids", []))
+        last_alerted = load_last_alerted_times()
+        now = datetime.now(timezone.utc)
+        new_alerts = []
+
+        for item in items:
+            app_id = item["app_id"]
+            cred_name = item["cred_name"]
+            if not app_id or not cred_name:
+                continue
+            if app_id in ignored_app_ids:
+                continue
+
+            key = f"{app_id}|{cred_name}"
+            last_time_str = last_alerted.get(key)
+
+            can_alert = True
+            # 仅在非强制模式下检查最小间隔
+            if not force and last_time_str:
+                try:
+                    last_time = datetime.fromisoformat(last_time_str.replace("Z", "+00:00"))
+                    if (now - last_time).total_seconds() < min_interval * 3600:
+                        can_alert = False
+                except:
+                    pass  # 时间解析失败，允许告警
+
+            if can_alert:
+                new_alerts.append(item)
+
+        if not new_alerts:
+            msg = "无新告警（可能已在静默期）"
+            if force:
+                msg += "，但强制模式下仍无满足条件的凭据"
+            return {"status": "no_alert", "message": msg}
+
+        # 构建消息
+        msg = f"[Azure 凭据到期告警]\n以下凭据将在 {threshold} 天内到期，请及时处理：\n\n"
+        for item in new_alerts:
+            expiry_dt = datetime.fromisoformat(item["expires_on"].replace("Z", "+00:00"))
+            days_left = (expiry_dt - now).days
+            msg += f"• {item['type']} | {item['app_name']} ({item['app_id']})\n"
+            msg += f"  凭据: {item['cred_name']} | 到期: {item['expires_on']} | 剩余: {days_left} 天\n\n"
+
+        if send_dingtalk_message(webhook, msg, secret):
+            # 更新告警时间（即使是 force，也记录时间）
+            for item in new_alerts:
+                key = f"{item['app_id']}|{item['cred_name']}"
+                last_alerted[key] = now.isoformat()
+            save_last_alerted_times(last_alerted)
+            return {
+                "status": "success",
+                "message": f"成功发送 {len(new_alerts)} 条告警",
+                "count": len(new_alerts)
+            }
+        else:
+            return {"status": "failed", "message": "钉钉消息发送失败"}
+
+    except Exception as e:
+        error_msg = f"告警检查异常: {str(e)}"
+        print(error_msg)
+        return {"status": "error", "message": error_msg}
+
+# === Flask 路由 ===
 @app.get("/api/expiring")
 def api_expiring():
     try:
@@ -193,8 +377,7 @@ def api_expiring():
             show_without_pwd = show_without_pwd_param.lower() in ("1", "true", "yes", "y")
 
         params_key = (days, show_without_pwd)
-        
-        # 检查缓存
+
         if CACHE.is_valid(params_key):
             return jsonify({
                 "params": {"days": days, "showWithoutPassword": show_without_pwd},
@@ -203,7 +386,6 @@ def api_expiring():
                 "fetched_at": CACHE.fetched_at
             })
 
-        # 获取新数据
         items = fetch_expiring(days, show_without_pwd)
         CACHE.update(items, params_key)
 
@@ -216,7 +398,6 @@ def api_expiring():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# 健康检查端点
 @app.get("/health")
 def health_check():
     return jsonify({
@@ -225,7 +406,110 @@ def health_check():
         "cache_age": time.time() - CACHE.fetched_at if CACHE.data else None
     })
 
-# 主页面
+# === 告警配置 API ===
+@app.get("/api/alert/config")
+def get_alert_config():
+    config = load_alert_config()
+    return jsonify(config)
+
+@app.post("/api/alert/config")
+def update_alert_config():
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "无效的 JSON 数据"}), 400
+
+    webhook = (data.get("dingtalk_webhook") or "").strip()
+    secret = (data.get("dingtalk_secret") or "").strip()
+    threshold = data.get("alert_threshold_days", 30)
+    check_interval = data.get("alert_check_interval_hours", 24)
+    min_interval = data.get("min_alert_interval_hours", 24)
+
+    try:
+        threshold = int(threshold)
+        check_interval = int(check_interval)
+        min_interval = int(min_interval)
+        if not (1 <= threshold <= 365):
+            return jsonify({"error": "告警周期必须在 1-365 天之间"}), 400
+        if not (1 <= check_interval <= 168):
+            return jsonify({"error": "检查间隔必须在 1-168 小时之间（最多7天）"}), 400
+        if not (1 <= min_interval <= 168):
+            return jsonify({"error": "最小重发间隔必须在 1-168 小时之间（最多7天）"}), 400
+        if min_interval > check_interval:
+            return jsonify({"error": "最小重发间隔不能大于检查间隔"}), 400
+    except (TypeError, ValueError):
+        return jsonify({"error": "参数必须为整数"}), 400
+
+    if webhook and not webhook.startswith("https://oapi.dingtalk.com/robot/send?"):
+        return jsonify({"error": "钉钉 Webhook 地址格式不正确"}), 400
+
+    config = load_alert_config()
+    config["dingtalk_webhook"] = webhook
+    config["dingtalk_secret"] = secret
+    config["alert_threshold_days"] = threshold
+    config["alert_check_interval_hours"] = check_interval
+    config["min_alert_interval_hours"] = min_interval
+    save_alert_config(config)
+
+    return jsonify({"status": "success", "message": "告警配置已更新"})
+
+@app.post("/api/alert/trigger")
+def trigger_alert_now():
+    # 强制绕过最小间隔限制
+    result = perform_alert_check_and_send(force=True)
+    if result["status"] in ("success", "no_alert", "skipped"):
+        return jsonify(result)
+    else:
+        return jsonify(result), 500
+
+# === 新增：返回忽略应用的完整凭据信息 ===
+@app.get("/api/alert/ignored")
+def get_ignored_app_details():
+    """返回被忽略的应用的完整凭据信息（用于展示）"""
+    config = load_alert_config()
+    ignored_app_ids = set(config.get("ignored_app_ids", []))
+    
+    if not ignored_app_ids:
+        return jsonify([])
+
+    try:
+        threshold = config.get("alert_threshold_days", 30)
+        all_items = fetch_expiring(threshold, show_without_password=True)
+        ignored_items = [
+            item for item in all_items
+            if item["app_id"] in ignored_app_ids
+        ]
+        return jsonify(ignored_items)
+    except Exception as e:
+        print(f"获取忽略应用详情失败: {e}")
+        return jsonify([{"app_id": app_id} for app_id in ignored_app_ids])
+
+@app.post("/api/alert/ignored")
+def add_ignored_app_id():
+    data = request.get_json()
+    app_id = (data.get("app_id") or "").strip()
+    if not app_id:
+        return jsonify({"error": "app_id 不能为空"}), 400
+
+    config = load_alert_config()
+    ignored = config.setdefault("ignored_app_ids", [])
+    if app_id not in ignored:
+        ignored.append(app_id)
+        save_alert_config(config)
+    return jsonify({"status": "ignored", "app_id": app_id})
+
+@app.delete("/api/alert/ignored")
+def remove_ignored_app_id():
+    data = request.get_json()
+    app_id = (data.get("app_id") or "").strip()
+    if not app_id:
+        return jsonify({"error": "app_id 不能为空"}), 400
+
+    config = load_alert_config()
+    ignored = config.get("ignored_app_ids", [])
+    config["ignored_app_ids"] = [aid for aid in ignored if aid != app_id]
+    save_alert_config(config)
+    return jsonify({"status": "removed", "app_id": app_id})
+
 @app.get("/")
 def index():
     return render_template(
@@ -235,12 +519,6 @@ def index():
         cache_ttl=CACHE_TTL_SECONDS
     )
 
-# 静态文件服务（如果需要）
-@app.route('/static/<path:filename>')
-def static_files(filename):
-    return send_from_directory('static', filename)
-
-# 错误处理
 @app.errorhandler(404)
 def not_found_error(error):
     return jsonify({"error": "Not found"}), 404
@@ -249,12 +527,40 @@ def not_found_error(error):
 def internal_error(error):
     return jsonify({"error": "Internal server error"}), 500
 
+# === 后台线程 ===
+def alert_check_worker():
+    print("✅ 告警检查线程已启动")
+    while True:
+        try:
+            config = load_alert_config()
+            interval_hours = config.get("alert_check_interval_hours", 24)
+            sleep_seconds = interval_hours * 3600
+
+            result = perform_alert_check_and_send(force=False)
+            status = result["status"]
+            message = result["message"]
+            if status == "success":
+                print(f"✅ {message}")
+            elif status == "no_alert":
+                print("ℹ️ " + message)
+            elif status == "skipped":
+                print("⏭️ " + message)
+            else:
+                print(f"❌ {message}")
+
+            time.sleep(sleep_seconds)
+
+        except Exception as e:
+            print(f"⚠️ 告警线程异常: {e}")
+            time.sleep(300)
+
 if __name__ == "__main__":
-    # 创建必要的目录
     os.makedirs("templates", exist_ok=True)
     os.makedirs("static", exist_ok=True)
-    
-    # 在开发模式下运行
+
+    alert_thread = threading.Thread(target=alert_check_worker, daemon=True)
+    alert_thread.start()
+
     app.run(
         host=os.getenv("HOST", "0.0.0.0"),
         port=PORT,
