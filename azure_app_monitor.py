@@ -41,6 +41,48 @@ GRAPH_API_URL = "https://graph.microsoft.com/v1.0/applications"
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
+# === 新增：日期格式化函数 ===
+def format_expiry_date(date_value):
+    """格式化日期为 YYYY-MM-DD 格式"""
+    if not date_value:
+        return None
+    
+    try:
+        # 如果是 datetime 对象
+        if isinstance(date_value, datetime):
+            return date_value.strftime('%Y-%m-%d')
+        
+        # 如果是字符串
+        elif isinstance(date_value, str):
+            # 处理带时区的 ISO 格式
+            date_str = date_value.replace('Z', '+00:00')
+            
+            # 移除微秒部分
+            if '.' in date_str:
+                date_str = date_str.split('.')[0] + '+00:00'
+            
+            # 解析为 datetime
+            try:
+                dt = datetime.fromisoformat(date_str)
+                return dt.strftime('%Y-%m-%d')
+            except ValueError:
+                # 尝试其他格式
+                for fmt in ['%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%d %H:%M:%S%z']:
+                    try:
+                        dt = datetime.strptime(date_str, fmt)
+                        return dt.strftime('%Y-%m-%d')
+                    except ValueError:
+                        continue
+                # 如果都无法解析，返回原始值
+                return date_value
+        
+        # 其他类型直接返回字符串表示
+        return str(date_value)
+    
+    except Exception as e:
+        print(f"⚠️ 日期格式化失败: {e}, 原始值: {date_value}")
+        return str(date_value)
+
 # 改进的缓存机制
 class Cache:
     def __init__(self):
@@ -249,7 +291,7 @@ def fetch_expiring(threshold_days: int, show_without_password: bool):
                         "app_name": name,
                         "app_id": app_id,
                         "cred_name": cred.get("displayName") or "Unnamed",
-                        "expires_on": end_dt
+                        "expires_on": end_dt  # 保持为 datetime 对象，稍后统一格式化
                     })
 
             for cert in key_creds:
@@ -268,7 +310,7 @@ def fetch_expiring(threshold_days: int, show_without_password: bool):
                         "app_name": name,
                         "app_id": app_id,
                         "cred_name": cert.get("displayName") or "Unnamed",
-                        "expires_on": end_dt
+                        "expires_on": end_dt  # 保持为 datetime 对象，稍后统一格式化
                     })
 
         next_link = data.get("@odata.nextLink")
@@ -281,8 +323,9 @@ def fetch_expiring(threshold_days: int, show_without_password: bool):
     type_weight = {"Client Secret": 0, "Certificate": 1}
     expiring.sort(key=lambda x: (type_weight.get(x["type"], 99), x["expires_on"]))
 
+    # 关键修改：统一格式化日期
     for item in expiring:
-        item["expires_on"] = item["expires_on"].isoformat()
+        item["expires_on"] = format_expiry_date(item["expires_on"])
 
     return expiring
 
@@ -341,10 +384,21 @@ def perform_alert_check_and_send(force=False):
         # 构建消息
         msg = f"[Azure 凭据到期告警]\n以下凭据将在 {threshold} 天内到期，请及时处理：\n\n"
         for item in new_alerts:
-            expiry_dt = datetime.fromisoformat(item["expires_on"].replace("Z", "+00:00"))
-            days_left = (expiry_dt - now).days
+            # 解析日期来计算剩余天数
+            expiry_date = item["expires_on"]
+            try:
+                # 解析格式化的日期
+                expiry_dt = datetime.strptime(expiry_date, '%Y-%m-%d')
+                days_left = (expiry_dt - now.replace(tzinfo=None)).days
+                if days_left < 0:
+                    days_left_text = f"已过期 {-days_left} 天"
+                else:
+                    days_left_text = f"剩余 {days_left} 天"
+            except:
+                days_left_text = "日期格式异常"
+            
             msg += f"• {item['type']} | {item['app_name']} ({item['app_id']})\n"
-            msg += f"  凭据: {item['cred_name']} | 到期: {item['expires_on']} | 剩余: {days_left} 天\n\n"
+            msg += f"  凭据: {item['cred_name']} | 到期: {expiry_date} | {days_left_text}\n\n"
 
         if send_dingtalk_message(webhook, msg, secret):
             # 更新告警时间（即使是 force，也记录时间）
