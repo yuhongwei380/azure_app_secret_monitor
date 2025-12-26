@@ -48,37 +48,24 @@ def format_expiry_date(date_value):
         return None
     
     try:
-        # 如果是 datetime 对象
         if isinstance(date_value, datetime):
             return date_value.strftime('%Y-%m-%d')
-        
-        # 如果是字符串
         elif isinstance(date_value, str):
-            # 处理带时区的 ISO 格式
             date_str = date_value.replace('Z', '+00:00')
-            
-            # 移除微秒部分
             if '.' in date_str:
                 date_str = date_str.split('.')[0] + '+00:00'
-            
-            # 解析为 datetime
             try:
                 dt = datetime.fromisoformat(date_str)
                 return dt.strftime('%Y-%m-%d')
             except ValueError:
-                # 尝试其他格式
                 for fmt in ['%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%d %H:%M:%S%z']:
                     try:
                         dt = datetime.strptime(date_str, fmt)
                         return dt.strftime('%Y-%m-%d')
                     except ValueError:
                         continue
-                # 如果都无法解析，返回原始值
                 return date_value
-        
-        # 其他类型直接返回字符串表示
         return str(date_value)
-    
     except Exception as e:
         print(f"⚠️ 日期格式化失败: {e}, 原始值: {date_value}")
         return str(date_value)
@@ -116,7 +103,7 @@ def load_alert_config():
                 config.setdefault("dingtalk_secret", "")
                 config.setdefault("alert_threshold_days", 30)
                 config.setdefault("alert_check_interval_hours", 24)
-                config.setdefault("min_alert_interval_hours", 24)  # 最小重发间隔（小时）
+                config.setdefault("min_alert_interval_hours", 24)
                 config.setdefault("ignored_app_ids", [])
                 return config
         except Exception as e:
@@ -138,13 +125,10 @@ def save_alert_config(config):
         print(f"保存告警配置失败: {e}")
 
 def load_last_alerted_times():
-    """加载上次告警时间，兼容旧版 list 格式"""
     if LAST_ALERTED_FILE.exists():
         try:
             with open(LAST_ALERTED_FILE, "r") as f:
                 data = json.load(f)
-            
-            # 兼容旧版 list 格式
             if isinstance(data, list):
                 print("检测到旧版 last_alerted.json，正在迁移为新格式...")
                 now = datetime.now(timezone.utc).isoformat()
@@ -246,11 +230,12 @@ def get_access_token():
     else:
         raise Exception(f"获取令牌失败: {result.get('error_description', result)}")
 
-def fetch_expiring(threshold_days: int, show_without_password: bool):
+# === 核心修改：新增 show_all 参数 ===
+def fetch_expiring(threshold_days: int, show_without_password: bool, show_all: bool = False):
     token = get_access_token()
     headers = {"Authorization": f"Bearer {token}"}
 
-    cutoff = datetime.now(timezone.utc) + timedelta(days=threshold_days)
+    cutoff = None if show_all else datetime.now(timezone.utc) + timedelta(days=threshold_days)
 
     params = {
         "$select": "id,displayName,appId,passwordCredentials,keyCredentials",
@@ -272,11 +257,11 @@ def fetch_expiring(threshold_days: int, show_without_password: bool):
             password_creds = app_obj.get("passwordCredentials", []) or []
             key_creds = app_obj.get("keyCredentials", []) or []
 
-            has_password = len(password_creds) > 0
+            has_any_credential = len(password_creds) > 0 or len(key_creds) > 0
 
-            if not has_password and not show_without_password:
+            if not has_any_credential and not show_without_password:
                 continue
-
+            
             for cred in password_creds:
                 end_dt_str = cred.get("endDateTime")
                 if not end_dt_str:
@@ -285,13 +270,13 @@ def fetch_expiring(threshold_days: int, show_without_password: bool):
                     end_dt = datetime.fromisoformat(end_dt_str.replace("Z", "+00:00"))
                 except ValueError:
                     continue
-                if end_dt <= cutoff:
+                if show_all or end_dt <= cutoff:
                     expiring.append({
                         "type": "Client Secret",
                         "app_name": name,
                         "app_id": app_id,
                         "cred_name": cred.get("displayName") or "Unnamed",
-                        "expires_on": end_dt  # 保持为 datetime 对象，稍后统一格式化
+                        "expires_on": end_dt
                     })
 
             for cert in key_creds:
@@ -304,13 +289,13 @@ def fetch_expiring(threshold_days: int, show_without_password: bool):
                     end_dt = datetime.fromisoformat(end_dt_str.replace("Z", "+00:00"))
                 except ValueError:
                     continue
-                if end_dt <= cutoff:
+                if show_all or end_dt <= cutoff:
                     expiring.append({
                         "type": "Certificate",
                         "app_name": name,
                         "app_id": app_id,
                         "cred_name": cert.get("displayName") or "Unnamed",
-                        "expires_on": end_dt  # 保持为 datetime 对象，稍后统一格式化
+                        "expires_on": end_dt
                     })
 
         next_link = data.get("@odata.nextLink")
@@ -323,7 +308,6 @@ def fetch_expiring(threshold_days: int, show_without_password: bool):
     type_weight = {"Client Secret": 0, "Certificate": 1}
     expiring.sort(key=lambda x: (type_weight.get(x["type"], 99), x["expires_on"]))
 
-    # 关键修改：统一格式化日期
     for item in expiring:
         item["expires_on"] = format_expiry_date(item["expires_on"])
 
@@ -331,15 +315,11 @@ def fetch_expiring(threshold_days: int, show_without_password: bool):
 
 # === 核心告警逻辑 ===
 def perform_alert_check_and_send(force=False):
-    """
-    执行告警检查
-    :param force: 如果为 True，忽略最小告警间隔，强制发送
-    """
     config = load_alert_config()
     webhook = config.get("dingtalk_webhook", "").strip()
     secret = config.get("dingtalk_secret", "").strip()
     threshold = config.get("alert_threshold_days", 30)
-    min_interval = config.get("min_alert_interval_hours", 24)  # 单位：小时
+    min_interval = config.get("min_alert_interval_hours", 24)
 
     if not webhook:
         return {"status": "skipped", "message": "未配置钉钉 Webhook"}
@@ -363,14 +343,13 @@ def perform_alert_check_and_send(force=False):
             last_time_str = last_alerted.get(key)
 
             can_alert = True
-            # 仅在非强制模式下检查最小间隔
             if not force and last_time_str:
                 try:
                     last_time = datetime.fromisoformat(last_time_str.replace("Z", "+00:00"))
                     if (now - last_time).total_seconds() < min_interval * 3600:
                         can_alert = False
                 except:
-                    pass  # 时间解析失败，允许告警
+                    pass
 
             if can_alert:
                 new_alerts.append(item)
@@ -381,13 +360,10 @@ def perform_alert_check_and_send(force=False):
                 msg += "，但强制模式下仍无满足条件的凭据"
             return {"status": "no_alert", "message": msg}
 
-        # 构建消息
         msg = f"[Azure 凭据到期告警]\n以下凭据将在 {threshold} 天内到期，请及时处理：\n\n"
         for item in new_alerts:
-            # 解析日期来计算剩余天数
             expiry_date = item["expires_on"]
             try:
-                # 解析格式化的日期
                 expiry_dt = datetime.strptime(expiry_date, '%Y-%m-%d')
                 days_left = (expiry_dt - now.replace(tzinfo=None)).days
                 if days_left < 0:
@@ -401,7 +377,6 @@ def perform_alert_check_and_send(force=False):
             msg += f"  凭据: {item['cred_name']} | 到期: {expiry_date} | {days_left_text}\n\n"
 
         if send_dingtalk_message(webhook, msg, secret):
-            # 更新告警时间（即使是 force，也记录时间）
             for item in new_alerts:
                 key = f"{item['app_id']}|{item['cred_name']}"
                 last_alerted[key] = now.isoformat()
@@ -425,26 +400,38 @@ def api_expiring():
     try:
         days = request.args.get("days", type=int) or DEFAULT_EXPIRY_THRESHOLD_DAYS
         show_without_pwd_param = request.args.get("showWithoutPassword")
+        show_all_param = request.args.get("showAll")
+
         if show_without_pwd_param is None:
             show_without_pwd = DEFAULT_SHOW_APPS_WITHOUT_PASSWORD
         else:
             show_without_pwd = show_without_pwd_param.lower() in ("1", "true", "yes", "y")
 
-        params_key = (days, show_without_pwd)
+        show_all = show_all_param is not None and show_all_param.lower() in ("1", "true", "yes", "y")
+
+        params_key = (days, show_without_pwd, show_all)
 
         if CACHE.is_valid(params_key):
             return jsonify({
-                "params": {"days": days, "showWithoutPassword": show_without_pwd},
+                "params": {
+                    "days": days,
+                    "showWithoutPassword": show_without_pwd,
+                    "showAll": show_all
+                },
                 "cached": True,
                 "items": CACHE.data,
                 "fetched_at": CACHE.fetched_at
             })
 
-        items = fetch_expiring(days, show_without_pwd)
+        items = fetch_expiring(days, show_without_pwd, show_all)
         CACHE.update(items, params_key)
 
         return jsonify({
-            "params": {"days": days, "showWithoutPassword": show_without_pwd},
+            "params": {
+                "days": days,
+                "showWithoutPassword": show_without_pwd,
+                "showAll": show_all
+            },
             "cached": False,
             "items": items,
             "fetched_at": CACHE.fetched_at
@@ -508,30 +495,23 @@ def update_alert_config():
 
 @app.post("/api/alert/trigger")
 def trigger_alert_now():
-    # 强制绕过最小间隔限制
     result = perform_alert_check_and_send(force=True)
     if result["status"] in ("success", "no_alert", "skipped"):
         return jsonify(result)
     else:
         return jsonify(result), 500
 
-# === 新增：返回忽略应用的完整凭据信息 ===
 @app.get("/api/alert/ignored")
 def get_ignored_app_details():
-    """返回被忽略的应用的完整凭据信息（用于展示）"""
     config = load_alert_config()
     ignored_app_ids = set(config.get("ignored_app_ids", []))
-    
     if not ignored_app_ids:
         return jsonify([])
 
     try:
         threshold = config.get("alert_threshold_days", 30)
         all_items = fetch_expiring(threshold, show_without_password=True)
-        ignored_items = [
-            item for item in all_items
-            if item["app_id"] in ignored_app_ids
-        ]
+        ignored_items = [item for item in all_items if item["app_id"] in ignored_app_ids]
         return jsonify(ignored_items)
     except Exception as e:
         print(f"获取忽略应用详情失败: {e}")
