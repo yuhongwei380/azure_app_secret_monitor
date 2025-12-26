@@ -250,7 +250,8 @@ def fetch_expiring(threshold_days: int, show_without_password: bool):
     token = get_access_token()
     headers = {"Authorization": f"Bearer {token}"}
 
-    cutoff = datetime.now(timezone.utc) + timedelta(days=threshold_days)
+    # 注意：不再在后端过滤日期，获取所有凭据，让前端根据天数筛选
+    # 这样可以确保获取到所有凭据，不会因为阈值设置而遗漏
 
     params = {
         "$select": "id,displayName,appId,passwordCredentials,keyCredentials",
@@ -280,38 +281,45 @@ def fetch_expiring(threshold_days: int, show_without_password: bool):
             for cred in password_creds:
                 end_dt_str = cred.get("endDateTime")
                 if not end_dt_str:
+                    # 如果没有到期时间，跳过（可能是已删除的凭据）
+                    print(f"⚠️ 跳过无到期时间的 Client Secret: app={name}, cred={cred.get('displayName', 'Unnamed')}")
                     continue
                 try:
                     end_dt = datetime.fromisoformat(end_dt_str.replace("Z", "+00:00"))
-                except ValueError:
+                except ValueError as e:
+                    print(f"⚠️ 日期解析失败: {end_dt_str}, 错误: {e}")
                     continue
-                if end_dt <= cutoff:
-                    expiring.append({
-                        "type": "Client Secret",
-                        "app_name": name,
-                        "app_id": app_id,
-                        "cred_name": cred.get("displayName") or "Unnamed",
-                        "expires_on": end_dt  # 保持为 datetime 对象，稍后统一格式化
-                    })
+                # 移除日期过滤，获取所有凭据（前端会根据天数筛选）
+                expiring.append({
+                    "type": "Client Secret",
+                    "app_name": name,
+                    "app_id": app_id,
+                    "cred_name": cred.get("displayName") or "Unnamed",
+                    "expires_on": end_dt  # 保持为 datetime 对象，稍后统一格式化
+                })
 
             for cert in key_creds:
                 if cert.get("usage") and cert.get("usage") != "Verify":
+                    # 跳过非验证用途的证书
                     continue
                 end_dt_str = cert.get("endDateTime")
                 if not end_dt_str:
+                    # 如果没有到期时间，跳过
+                    print(f"⚠️ 跳过无到期时间的 Certificate: app={name}, cert={cert.get('displayName', 'Unnamed')}")
                     continue
                 try:
                     end_dt = datetime.fromisoformat(end_dt_str.replace("Z", "+00:00"))
-                except ValueError:
+                except ValueError as e:
+                    print(f"⚠️ 日期解析失败: {end_dt_str}, 错误: {e}")
                     continue
-                if end_dt <= cutoff:
-                    expiring.append({
-                        "type": "Certificate",
-                        "app_name": name,
-                        "app_id": app_id,
-                        "cred_name": cert.get("displayName") or "Unnamed",
-                        "expires_on": end_dt  # 保持为 datetime 对象，稍后统一格式化
-                    })
+                # 移除日期过滤，获取所有凭据（前端会根据天数筛选）
+                expiring.append({
+                    "type": "Certificate",
+                    "app_name": name,
+                    "app_id": app_id,
+                    "cred_name": cert.get("displayName") or "Unnamed",
+                    "expires_on": end_dt  # 保持为 datetime 对象，稍后统一格式化
+                })
 
         next_link = data.get("@odata.nextLink")
         if next_link:
