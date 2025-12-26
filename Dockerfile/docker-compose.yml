@@ -12,8 +12,8 @@ services:
       - ./.env:/app/.env:ro
 
       # 可选：持久化告警状态（避免容器重启后重复告警）
-      #- ./alert_config.json:/app/alert_config.json
-      #- ./last_alerted.json:/arg/last_alerted.json
+      - ./alert_config.json:/app/alert_config.json
+      - ./last_alerted.json:/arg/last_alerted.json
 
     restart: unless-stopped
     environment:
@@ -22,6 +22,8 @@ services:
       - EXPIRY_THRESHOLD_DAYS=30
       - SHOW_APPS_WITHOUT_PASSWORD=0   # 0 = 隐藏（仅有证书、没有密码的应用会被过滤掉）; 1 = 显示（仍会展示仅有证书的应用）
       - CACHE_TTL_SECONDS=300
+      #- DINGTALK_WEBHOOK=
+      #- DINGTALK_SECRET=
       # 可选：覆盖 .env 中的值（但通常不需要，因为 .env 已挂载）
       # - PORT=8000
     # 如果你希望限制权限，可以取消注释以下行（但 appuser 需要读权限）
