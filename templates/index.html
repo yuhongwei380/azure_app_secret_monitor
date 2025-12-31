@@ -219,8 +219,6 @@ body {
                     <option value="dingtalk">钉钉 (DingTalk)</option>
                     <option value="feishu">飞书 (Feishu/Lark)</option>
                     <option value="email">邮件 (SMTP)</option>
-                    <option value="both">钉钉 + 飞书</option>
-                    <option value="all">所有渠道 (钉钉+飞书+邮件)</option>
                 </select>
             </div>
 
@@ -259,7 +257,7 @@ body {
                     </div>
                 </div>
 
-                <!-- SMTP配置 (NEW) -->
+                <!-- SMTP配置 -->
                 <div class="col-md-12 channel-group" id="smtpConfigGroup" style="display: none;">
                     <div class="card h-100 border-info border-opacity-25 bg-info bg-opacity-10">
                         <div class="card-body">
@@ -369,18 +367,12 @@ function toggleChannelConfig() {
     feishu.style.display = 'none';
     smtp.style.display = 'none';
 
+    // Show single selected
     if (val === 'dingtalk') {
         ding.style.display = 'block';
     } else if (val === 'feishu') {
         feishu.style.display = 'block';
     } else if (val === 'email') {
-        smtp.style.display = 'block';
-    } else if (val === 'both') {
-        ding.style.display = 'block';
-        feishu.style.display = 'block';
-    } else if (val === 'all') {
-        ding.style.display = 'block';
-        feishu.style.display = 'block';
         smtp.style.display = 'block';
     }
 }
