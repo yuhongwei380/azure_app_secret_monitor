@@ -117,8 +117,6 @@ CACHE = Cache()
 
 # === 配置管理 (带线程锁) ===
 def load_alert_config():
-    # 读操作一般不需要加排他锁，但在高并发写入时加锁更安全，这里简化处理只在写时加锁
-    # 若文件可能被写坏，读也需要防错
     if ALERT_CONFIG_FILE.exists():
         try:
             with open(ALERT_CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -132,6 +130,8 @@ def load_alert_config():
     # 设置默认值
     config.setdefault("dingtalk_webhook", "")
     config.setdefault("dingtalk_secret", "")
+    config.setdefault("feishu_webhook", "")    # 新增：飞书
+    config.setdefault("feishu_secret", "")     # 新增：飞书
     config.setdefault("alert_threshold_days", 30)
     config.setdefault("alert_check_interval_hours", 24)
     config.setdefault("min_alert_interval_hours", 24)
@@ -173,7 +173,7 @@ def save_last_alerted_times(data):
         except Exception as e:
             print(f"保存告警时间失败: {e}")
 
-# === 钉钉相关 ===
+# === 消息通知相关 ===
 def sign_dingtalk(secret, timestamp):
     if not secret:
         return ""
@@ -212,6 +212,48 @@ def send_dingtalk_message(webhook_url, message, secret=""):
         return success
     except Exception as e:
         print(f"钉钉消息发送失败: {e}")
+        return False
+
+def sign_feishu(secret, timestamp):
+    """计算飞书签名"""
+    if not secret:
+        return ""
+    string_to_sign = f"{timestamp}\n{secret}"
+    hmac_code = hmac.new(
+        string_to_sign.encode("utf-8"),
+        digestmod=hashlib.sha256
+    ).digest()
+    sign = base64.b64encode(hmac_code).decode("utf-8")
+    return sign
+
+def send_feishu_message(webhook_url, message, secret=""):
+    """发送飞书消息"""
+    if not webhook_url or not message:
+        return False
+    try:
+        # 飞书要求 timestamp 为秒级整数
+        timestamp = str(int(time.time()))
+        headers = {"Content-Type": "application/json"}
+        data = {
+            "msg_type": "text",
+            "content": {"text": message}
+        }
+
+        if secret:
+            sign = sign_feishu(secret, timestamp)
+            data["timestamp"] = timestamp
+            data["sign"] = sign
+
+        resp = requests.post(webhook_url, json=data, headers=headers, timeout=10)
+        resp_json = resp.json()
+        
+        # 飞书成功返回 code: 0
+        success = resp.status_code == 200 and resp_json.get("code") == 0
+        if not success:
+            print(f"飞书返回错误: {resp.text}")
+        return success
+    except Exception as e:
+        print(f"飞书消息发送失败: {e}")
         return False
 
 # === Azure 认证 (单例优化) ===
@@ -253,12 +295,6 @@ def get_access_token():
     result = app_msal.acquire_token_for_client(scopes=GRAPH_API_SCOPE)
     
     if "access_token" in result:
-        if DEBUG_TOKEN:
-            try:
-                decoded = jwt.decode(result["access_token"], options={"verify_signature": False})
-                print("DEBUG token info:", {"roles": decoded.get("roles"), "exp": decoded.get("exp")})
-            except:
-                pass
         return result["access_token"]
     else:
         # 如果获取失败（如证书过期），重置 app 实例以便下次重试
@@ -337,15 +373,15 @@ def fetch_expiring(threshold_days: int, show_without_password: bool, show_all: b
         next_link = data.get("@odata.nextLink")
         if next_link:
             url = next_link
-            params = None # nextLink 已经包含了参数
+            params = None
         else:
             url = None
 
-    # 排序：Secret在前，然后按过期时间
+    # 排序
     type_weight = {"Client Secret": 0, "Certificate": 1}
     expiring.sort(key=lambda x: (type_weight.get(x["type"], 99), x["expires_on"]))
 
-    # 格式化输出日期
+    # 格式化日期
     for item in expiring:
         item["expires_on"] = format_expiry_date(item["expires_on"])
 
@@ -353,13 +389,16 @@ def fetch_expiring(threshold_days: int, show_without_password: bool, show_all: b
 
 def perform_alert_check_and_send(force=False):
     config = load_alert_config()
-    webhook = config.get("dingtalk_webhook", "").strip()
-    secret = config.get("dingtalk_secret", "").strip()
+    ding_webhook = config.get("dingtalk_webhook", "").strip()
+    ding_secret = config.get("dingtalk_secret", "").strip()
+    feishu_webhook = config.get("feishu_webhook", "").strip()
+    feishu_secret = config.get("feishu_secret", "").strip()
+
     threshold = config.get("alert_threshold_days", 30)
     min_interval = config.get("min_alert_interval_hours", 24)
 
-    if not webhook:
-        return {"status": "skipped", "message": "未配置钉钉 Webhook"}
+    if not ding_webhook and not feishu_webhook:
+        return {"status": "skipped", "message": "未配置任何告警 Webhook"}
 
     try:
         items = fetch_expiring(threshold, show_without_password=True, show_all=False)
@@ -386,7 +425,7 @@ def perform_alert_check_and_send(force=False):
                     if (now - last_time).total_seconds() < min_interval * 3600:
                         can_alert = False
                 except:
-                    pass # 解析失败则默认发送
+                    pass
 
             if can_alert:
                 new_alerts.append(item)
@@ -395,12 +434,11 @@ def perform_alert_check_and_send(force=False):
             msg = "无新告警（可能已在静默期）"
             return {"status": "no_alert", "message": msg}
 
-        # 构建钉钉消息
+        # 构建消息
         msg = f"[Azure 凭据到期告警]\n以下凭据将在 {threshold} 天内到期，请及时处理：\n\n"
         for item in new_alerts:
             expiry_date = item["expires_on"]
             try:
-                # 简单计算剩余天数用于显示
                 expiry_dt = datetime.strptime(expiry_date, '%Y-%m-%d')
                 days_left = (expiry_dt - now.replace(tzinfo=None)).days
                 days_txt = f"剩余 {days_left} 天" if days_left >= 0 else f"已过期 {-days_left} 天"
@@ -411,7 +449,21 @@ def perform_alert_check_and_send(force=False):
             msg += f"  AppID: {item['app_id']}\n"
             msg += f"  凭据: {item['cred_name']} | 到期: {expiry_date} ({days_txt})\n\n"
 
-        if send_dingtalk_message(webhook, msg, secret):
+        # 发送逻辑
+        send_results = []
+        if ding_webhook:
+            if send_dingtalk_message(ding_webhook, msg, ding_secret):
+                send_results.append("钉钉成功")
+            else:
+                send_results.append("钉钉失败")
+        
+        if feishu_webhook:
+            if send_feishu_message(feishu_webhook, msg, feishu_secret):
+                send_results.append("飞书成功")
+            else:
+                send_results.append("飞书失败")
+
+        if any("成功" in r for r in send_results):
             # 更新告警时间
             for item in new_alerts:
                 key = f"{item['app_id']}|{item['cred_name']}"
@@ -420,11 +472,11 @@ def perform_alert_check_and_send(force=False):
             
             return {
                 "status": "success", 
-                "message": f"成功发送 {len(new_alerts)} 条告警",
+                "message": f"发送结果: {', '.join(send_results)}",
                 "count": len(new_alerts)
             }
         else:
-            return {"status": "failed", "message": "钉钉消息发送失败"}
+            return {"status": "failed", "message": f"所有发送失败: {', '.join(send_results)}"}
 
     except Exception as e:
         error_msg = f"告警检查异常: {str(e)}"
@@ -445,7 +497,6 @@ def api_expiring():
 
         show_all = show_all_param is not None and show_all_param.lower() in ("1", "true", "yes", "y")
 
-        # 使用参数元组作为缓存 Key
         params_key = (days, show_without_pwd, show_all)
 
         cached_items, fetched_at = CACHE.get(params_key)
@@ -460,7 +511,6 @@ def api_expiring():
         items = fetch_expiring(days, show_without_pwd, show_all)
         CACHE.set(params_key, items)
         
-        # 重新获取时间戳
         _, new_fetched_at = CACHE.get(params_key)
 
         return jsonify({
@@ -489,7 +539,6 @@ def update_alert_config():
     if not data:
         return jsonify({"error": "无效的 JSON 数据"}), 400
 
-    # 简单验证
     try:
         threshold = int(data.get("alert_threshold_days", 30))
         check_interval = int(data.get("alert_check_interval_hours", 24))
@@ -500,6 +549,8 @@ def update_alert_config():
     config = load_alert_config()
     config["dingtalk_webhook"] = (data.get("dingtalk_webhook") or "").strip()
     config["dingtalk_secret"] = (data.get("dingtalk_secret") or "").strip()
+    config["feishu_webhook"] = (data.get("feishu_webhook") or "").strip()
+    config["feishu_secret"] = (data.get("feishu_secret") or "").strip()
     config["alert_threshold_days"] = threshold
     config["alert_check_interval_hours"] = check_interval
     config["min_alert_interval_hours"] = min_interval
@@ -519,8 +570,6 @@ def get_ignored_app_details():
     ignored_app_ids = set(config.get("ignored_app_ids", []))
     if not ignored_app_ids:
         return jsonify([])
-    # 这里为了性能，仅返回 ID 列表，如果需要详情可以前端调 expiring 接口匹配，
-    # 或者像原来一样调 fetch_expiring 但这会较慢。
     return jsonify(list(ignored_app_ids))
 
 @app.post("/api/alert/ignored")
@@ -561,37 +610,31 @@ def alert_check_worker():
     print("✅ 告警检查线程已启动")
     while True:
         try:
-            # 1. 执行任务
             result = perform_alert_check_and_send(force=False)
             if result["status"] != "no_alert":
                 print(f"🔔 告警检查结果: {result['message']}")
             
-            # 2. 获取休眠时间
             config = load_alert_config()
             interval_hours = config.get("alert_check_interval_hours", 24)
             sleep_seconds = interval_hours * 3600
             
-            # 3. 循环小睡，每10秒检查一次（这里只是模拟，实际为了能响应退出信号）
-            # 简单的 sleep 在这里也是可以的，因为脚本主要跑在 Docker/Systemd
-            time.sleep(sleep_seconds)
-
+            # 分段休眠以便能更快响应退出
+            for _ in range(int(sleep_seconds / 10)):
+                time.sleep(10)
         except Exception as e:
             print(f"⚠️ 告警线程异常: {e}")
-            time.sleep(300) # 出错后等待5分钟
+            time.sleep(300)
 
 if __name__ == "__main__":
-    # 确保目录存在
     BASE_DIR.joinpath("templates").mkdir(parents=True, exist_ok=True)
     BASE_DIR.joinpath("static").mkdir(parents=True, exist_ok=True)
 
-    # 启动后台线程
     alert_thread = threading.Thread(target=alert_check_worker, daemon=True)
     alert_thread.start()
 
-    # 启动 Flask
     app.run(
         host=os.getenv("HOST", "0.0.0.0"),
         port=PORT,
         debug=os.getenv("FLASK_DEBUG", "0") == "1",
-        threaded=True  # 显式开启多线程
+        threaded=True
     )
