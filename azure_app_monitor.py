@@ -7,9 +7,9 @@ import time
 import hmac
 import hashlib
 import base64
-import smtplib  # <--- Added
-from email.mime.text import MIMEText # <--- Added
-from email.header import Header # <--- Added
+import smtplib
+from email.mime.text import MIMEText
+from email.header import Header
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from cryptography.hazmat.primitives import hashes
@@ -145,7 +145,7 @@ def send_feishu_message(webhook, msg, secret=""):
         print(f"Feishu Error: {e}")
         return False
 
-# === NEW: SMTP Function ===
+# === SMTP Function ===
 def send_smtp_message(host, port, user, pwd, to_addr, msg_content):
     try:
         subject = "Azure Credential Expiry Alert"
@@ -255,20 +255,20 @@ def check_alert(force=False):
         
         logs = []
         
-        # === Check Channels ===
+        # === Check Channels (UPDATED: Removed combined options) ===
         
-        # DingTalk
-        if channel in ["dingtalk", "both", "all"]:
+        # DingTalk Only
+        if channel == "dingtalk":
             if cfg.get("dingtalk_webhook"):
                 logs.append("DingTalk: " + ("OK" if send_dingtalk_message(cfg["dingtalk_webhook"], msg, cfg.get("dingtalk_secret")) else "Fail"))
         
-        # Feishu
-        if channel in ["feishu", "both", "all"]:
+        # Feishu Only
+        elif channel == "feishu":
             if cfg.get("feishu_webhook"):
                 logs.append("Feishu: " + ("OK" if send_feishu_message(cfg["feishu_webhook"], msg, cfg.get("feishu_secret")) else "Fail"))
         
-        # SMTP (Email)
-        if channel in ["email", "all"]:
+        # SMTP (Email) Only
+        elif channel == "email":
             if cfg.get("smtp_host") and cfg.get("smtp_to_email"):
                 res = send_smtp_message(
                     cfg["smtp_host"], 
@@ -284,7 +284,7 @@ def check_alert(force=False):
             for i in alerts: last[f"{i['app_id']}|{i['cred_name']}"] = now.isoformat()
             save_last_alerted(last)
             return {"status": "success", "message": ", ".join(logs)}
-        return {"status": "failed", "message": ", ".join(logs)}
+        return {"status": "failed", "message": ", ".join(logs) if logs else "No channel active"}
         
     except Exception as e: return {"status": "error", "message": str(e)}
 
@@ -317,7 +317,7 @@ def set_cfg():
         "active_channel", 
         "dingtalk_webhook", "dingtalk_secret", 
         "feishu_webhook", "feishu_secret",
-        "smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_to_email" # <--- Added SMTP fields
+        "smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_to_email"
     ]
     
     c.update({k: d.get(k, "").strip() for k in fields_to_save})
