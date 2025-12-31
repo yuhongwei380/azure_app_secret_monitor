@@ -7,6 +7,9 @@ import time
 import hmac
 import hashlib
 import base64
+import smtplib  # <--- Added
+from email.mime.text import MIMEText # <--- Added
+from email.header import Header # <--- Added
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from cryptography.hazmat.primitives import hashes
@@ -100,7 +103,7 @@ def load_last_alerted():
         try:
             with open(LAST_ALERTED_FILE, "r") as f:
                 data = json.load(f)
-                if isinstance(data, list): return {} # 简单处理旧格式
+                if isinstance(data, list): return {} 
                 return data
         except: pass
     return {}
@@ -140,6 +143,37 @@ def send_feishu_message(webhook, msg, secret=""):
         return resp.status_code == 200 and resp.json().get("code") == 0
     except Exception as e:
         print(f"Feishu Error: {e}")
+        return False
+
+# === NEW: SMTP Function ===
+def send_smtp_message(host, port, user, pwd, to_addr, msg_content):
+    try:
+        subject = "Azure Credential Expiry Alert"
+        
+        message = MIMEText(msg_content, 'plain', 'utf-8')
+        message['Subject'] = Header(subject, 'utf-8')
+        message['From'] = user
+        message['To'] = to_addr
+
+        # Determine SSL/TLS based on port
+        port = int(port)
+        if port == 465:
+            # SMTPS (SSL)
+            server = smtplib.SMTP_SSL(host, port, timeout=20)
+        else:
+            # STARTTLS or Plain
+            server = smtplib.SMTP(host, port, timeout=20)
+            if port == 587:
+                server.starttls()
+        
+        if user and pwd:
+            server.login(user, pwd)
+            
+        server.sendmail(user, [to_addr], message.as_string())
+        server.quit()
+        return True
+    except Exception as e:
+        print(f"SMTP Error: {e}")
         return False
 
 # === Azure ===
@@ -220,15 +254,32 @@ def check_alert(force=False):
         for i in alerts: msg += f"- {i['type']}: {i['app_name']}\n  ID: {i['app_id']}\n  Cred: {i['cred_name']} ({i['expires_on']})\n\n"
         
         logs = []
+        
+        # === Check Channels ===
+        
         # DingTalk
-        if channel in ["dingtalk", "both"]:
+        if channel in ["dingtalk", "both", "all"]:
             if cfg.get("dingtalk_webhook"):
                 logs.append("DingTalk: " + ("OK" if send_dingtalk_message(cfg["dingtalk_webhook"], msg, cfg.get("dingtalk_secret")) else "Fail"))
+        
         # Feishu
-        if channel in ["feishu", "both"]:
+        if channel in ["feishu", "both", "all"]:
             if cfg.get("feishu_webhook"):
                 logs.append("Feishu: " + ("OK" if send_feishu_message(cfg["feishu_webhook"], msg, cfg.get("feishu_secret")) else "Fail"))
         
+        # SMTP (Email)
+        if channel in ["email", "all"]:
+            if cfg.get("smtp_host") and cfg.get("smtp_to_email"):
+                res = send_smtp_message(
+                    cfg["smtp_host"], 
+                    cfg.get("smtp_port", 25), 
+                    cfg.get("smtp_user"), 
+                    cfg.get("smtp_password"), 
+                    cfg["smtp_to_email"], 
+                    msg
+                )
+                logs.append("SMTP: " + ("OK" if res else "Fail"))
+
         if any("OK" in l for l in logs):
             for i in alerts: last[f"{i['app_id']}|{i['cred_name']}"] = now.isoformat()
             save_last_alerted(last)
@@ -260,9 +311,21 @@ def get_cfg(): return jsonify(load_alert_config())
 def set_cfg():
     c = load_alert_config()
     d = request.json
-    c.update({k: d.get(k, "").strip() for k in ["active_channel", "dingtalk_webhook", "dingtalk_secret", "feishu_webhook", "feishu_secret"]})
+    
+    # Update regular keys
+    fields_to_save = [
+        "active_channel", 
+        "dingtalk_webhook", "dingtalk_secret", 
+        "feishu_webhook", "feishu_secret",
+        "smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_to_email" # <--- Added SMTP fields
+    ]
+    
+    c.update({k: d.get(k, "").strip() for k in fields_to_save})
+    
+    # Update integer keys
     for k in ["alert_threshold_days", "alert_check_interval_hours", "min_alert_interval_hours"]:
         c[k] = int(d.get(k, c.get(k, 24)))
+        
     save_alert_config(c)
     return jsonify({"status": "ok"})
 
