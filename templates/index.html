@@ -907,7 +907,7 @@ async function loadData(showLoading = true) {
     }
     const days = document.getElementById('days').value;
     const showWithoutPwd = document.getElementById('showWithoutPwd')?.checked ? 1 : 0;
-    const showAll = document.getElementById('showAll').checked ? 1 : 0; // 新增
+    const showAll = document.getElementById('showAll').checked ? 1 : 0;
 
     try {
         const response = await fetch(`/api/expiring?days=${encodeURIComponent(days)}&showWithoutPassword=${showWithoutPwd}&showAll=${showAll}`);
@@ -1156,14 +1156,16 @@ const eventHandlers = {
     },
     'typeFilter': () => renderTable(currentData),
     'showExpired': () => renderTable(currentData),
-    'showAll': () => loadData(true), // 新增绑定
-    'searchInput': () => renderTable(currentData),
-    'days': () => loadData(true)
+    'showAll': () => loadData(true),
+    'searchInput': () => renderTable(currentData)
+    // 删除了 'days': () => loadData(true)
 };
 
 document.addEventListener('DOMContentLoaded', () => {
     loadData();
     loadAlertConfig();
+    
+    // 批量绑定
     Object.entries(eventHandlers).forEach(([id, handler]) => {
         const element = document.getElementById(id);
         if (element) {
@@ -1172,6 +1174,18 @@ document.addEventListener('DOMContentLoaded', () => {
             element.addEventListener(eventType, handler);
         }
     });
+
+    // 专门为 Days 输入框添加 回车键 监听
+    const daysInput = document.getElementById('days');
+    if (daysInput) {
+        daysInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                loadData(true);
+                daysInput.blur(); // 收起键盘/移除焦点
+            }
+        });
+    }
+
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) loadData(false);
     });
