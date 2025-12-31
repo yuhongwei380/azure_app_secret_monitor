@@ -7,30 +7,31 @@ import time
 import hmac
 import hashlib
 import base64
+import smtplib
+from email.mime.text import MIMEText
+from email.header import Header
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from cryptography.hazmat.primitives import hashes
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from dotenv import load_dotenv
-import jwt
 from flask import Flask, request, jsonify, render_template
 
 # 加载 .env
 load_dotenv()
 
-# === 基础路径配置 (解决路径依赖问题) ===
+# === 基础路径配置 ===
 BASE_DIR = Path(__file__).resolve().parent
 
-# === 线程锁 (保证文件读写安全) ===
+# === 线程锁 ===
 CONFIG_LOCK = threading.Lock()
 STATE_LOCK = threading.Lock()
 
-# === 环境变量与默认值 ===
+# === 环境变量 ===
 CLIENT_ID = os.getenv("AZURE_CLIENT_ID", "your-client-id")
 TENANT_ID = os.getenv("AZURE_TENANT_ID", "your-tenant-id")
 
-# 证书路径优先使用绝对路径，如果环境变量是相对路径，则基于 BASE_DIR
 _cert_env = os.getenv("CERT_FILE", "app_monitor_cert.pem")
 _key_env = os.getenv("KEY_FILE", "app_monitor_key.pem")
 CERT_PATH = Path(_cert_env) if Path(_cert_env).is_absolute() else BASE_DIR / _cert_env
@@ -40,10 +41,8 @@ DEFAULT_EXPIRY_THRESHOLD_DAYS = int(os.getenv("EXPIRY_THRESHOLD_DAYS", "120"))
 DEFAULT_SHOW_APPS_WITHOUT_PASSWORD = os.getenv("SHOW_APPS_WITHOUT_PASSWORD", "1") == "1"
 CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "300"))
 PORT = int(os.getenv("PORT", "8000"))
-DEBUG_TOKEN = os.getenv("DEBUG_TOKEN", "0") == "1"
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key")
 
-# 配置文件路径
 ALERT_CONFIG_FILE = BASE_DIR / "alert_config.json"
 LAST_ALERTED_FILE = BASE_DIR / "last_alerted.json"
 
@@ -53,545 +52,316 @@ GRAPH_API_URL = "https://graph.microsoft.com/v1.0/applications"
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
-
-# === MSAL 全局单例 ===
 _MSAL_APP = None
 
 # === 辅助函数 ===
 def format_expiry_date(date_value):
-    """格式化日期为 YYYY-MM-DD 格式，增强容错性"""
-    if not date_value:
-        return None
-    
+    if not date_value: return None
     try:
-        if isinstance(date_value, datetime):
-            return date_value.strftime('%Y-%m-%d')
+        if isinstance(date_value, datetime): return date_value.strftime('%Y-%m-%d')
         elif isinstance(date_value, str):
-            # 统一处理时区标识
             date_str = date_value.replace('Z', '+00:00')
-            # 去除毫秒
-            if '.' in date_str and '+' in date_str:
-                parts = date_str.split('.')
-                timezone_part = parts[1][parts[1].find('+'):]
-                date_str = parts[0] + timezone_part
-            
-            try:
-                dt = datetime.fromisoformat(date_str)
-                return dt.strftime('%Y-%m-%d')
-            except ValueError:
-                # 尝试其他常见格式
-                for fmt in ['%Y-%m-%dT%H:%M:%S%z', '%Y-%m-%d %H:%M:%S%z', '%Y-%m-%d']:
-                    try:
-                        dt = datetime.strptime(date_str, fmt)
-                        return dt.strftime('%Y-%m-%d')
-                    except ValueError:
-                        continue
-                return date_value
+            if '.' in date_str: date_str = date_str.split('.')[0] + '+00:00'
+            try: return datetime.fromisoformat(date_str).strftime('%Y-%m-%d')
+            except: return date_value[:10]
         return str(date_value)
-    except Exception as e:
-        print(f"⚠️ 日期格式化失败: {e}, 原始值: {date_value}")
-        return str(date_value)
+    except: return str(date_value)
 
-# === 优化后的缓存类 ===
 class Cache:
     def __init__(self):
-        self._store = {}  # Key: params_tuple, Value: (timestamp, data)
+        self._store = {}
         self.ttl = CACHE_TTL_SECONDS
         self.lock = threading.Lock()
-
     def get(self, params):
         with self.lock:
             if params in self._store:
-                timestamp, data = self._store[params]
-                if time.time() - timestamp < self.ttl:
-                    return data, timestamp
-                else:
-                    del self._store[params] # 删除过期缓存
+                ts, data = self._store[params]
+                if time.time() - ts < self.ttl: return data, ts
+                else: del self._store[params]
         return None, None
-
     def set(self, params, data):
-        with self.lock:
-            self._store[params] = (time.time(), data)
+        with self.lock: self._store[params] = (time.time(), data)
 
 CACHE = Cache()
 
-# === 配置管理 (带线程锁) ===
 def load_alert_config():
-    # 读操作一般不需要加排他锁，但在高并发写入时加锁更安全，这里简化处理只在写时加锁
-    # 若文件可能被写坏，读也需要防错
     if ALERT_CONFIG_FILE.exists():
         try:
-            with open(ALERT_CONFIG_FILE, "r", encoding="utf-8") as f:
-                config = json.load(f)
-        except Exception as e:
-            print(f"加载告警配置失败: {e}")
-            config = {}
-    else:
-        config = {}
-    
-    # 设置默认值
-    config.setdefault("dingtalk_webhook", "")
-    config.setdefault("dingtalk_secret", "")
-    config.setdefault("alert_threshold_days", 30)
-    config.setdefault("alert_check_interval_hours", 24)
-    config.setdefault("min_alert_interval_hours", 24)
-    config.setdefault("ignored_app_ids", [])
-    return config
+            with open(ALERT_CONFIG_FILE, "r", encoding="utf-8") as f: return json.load(f)
+        except: pass
+    return {}
 
 def save_alert_config(config):
     with CONFIG_LOCK:
         try:
             with open(ALERT_CONFIG_FILE, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            print(f"保存告警配置失败: {e}")
+        except Exception as e: print(f"Save config error: {e}")
 
-def load_last_alerted_times():
+def load_last_alerted():
     if LAST_ALERTED_FILE.exists():
         try:
             with open(LAST_ALERTED_FILE, "r") as f:
                 data = json.load(f)
-            # 兼容旧版本列表格式
-            if isinstance(data, list):
-                print("检测到旧版 last_alerted.json，正在迁移...")
-                now = datetime.now(timezone.utc).isoformat()
-                new_data = {f"{item[0]}|{item[1]}": now for item in data if len(item) == 2}
-                save_last_alerted_times(new_data)
-                return new_data
-            elif isinstance(data, dict):
+                if isinstance(data, list): return {} 
                 return data
-            return {}
-        except Exception as e:
-            print(f"加载告警时间失败: {e}")
+        except: pass
     return {}
 
-def save_last_alerted_times(data):
+def save_last_alerted(data):
     with STATE_LOCK:
         try:
-            with open(LAST_ALERTED_FILE, "w") as f:
-                json.dump(data, f)
-        except Exception as e:
-            print(f"保存告警时间失败: {e}")
+            with open(LAST_ALERTED_FILE, "w") as f: json.dump(data, f)
+        except: pass
 
-# === 钉钉相关 ===
-def sign_dingtalk(secret, timestamp):
-    if not secret:
-        return ""
-    string_to_sign = f"{timestamp}\n{secret}"
-    hmac_code = hmac.new(
-        secret.encode("utf-8"),
-        string_to_sign.encode("utf-8"),
-        hashlib.sha256
-    ).digest()
-    sign = base64.b64encode(hmac_code).decode("utf-8")
-    return sign
-
-def send_dingtalk_message(webhook_url, message, secret=""):
-    if not webhook_url or not message:
-        return False
+# === 消息发送 ===
+def send_dingtalk_message(webhook, msg, secret=""):
     try:
-        timestamp = str(int(time.time() * 1000))
-        headers = {"Content-Type": "application/json"}
-        data = {"msgtype": "text", "text": {"content": message}}
-
-        url = webhook_url
+        ts = str(int(time.time() * 1000))
+        url = webhook
         if secret:
-            from urllib.parse import urlparse, parse_qs
-            parsed = urlparse(webhook_url)
-            query = parse_qs(parsed.query)
-            token_list = query.get("access_token")
-            if token_list:
-                token = token_list[0]
-                sign = sign_dingtalk(secret, timestamp)
-                url = f"https://oapi.dingtalk.com/robot/send?access_token={token}&timestamp={timestamp}&sign={sign}"
-            
-        resp = requests.post(url, json=data, headers=headers, timeout=10)
-        success = resp.status_code == 200
-        if not success:
-            print(f"钉钉返回错误: {resp.text}")
-        return success
+            sign_str = f"{ts}\n{secret}"
+            hmac_code = hmac.new(secret.encode('utf-8'), sign_str.encode('utf-8'), hashlib.sha256).digest()
+            sign = base64.b64encode(hmac_code).decode('utf-8')
+            if "access_token=" in webhook:
+                url = f"{webhook}&timestamp={ts}&sign={sign}"
+        resp = requests.post(url, json={"msgtype": "text", "text": {"content": msg}}, timeout=10)
+        return resp.status_code == 200
     except Exception as e:
-        print(f"钉钉消息发送失败: {e}")
+        print(f"DingTalk Error: {e}")
         return False
 
-# === Azure 认证 (单例优化) ===
-def get_cert_thumbprint(cert_path):
-    with open(cert_path, "rb") as f:
-        cert_data = f.read()
-    if b"-----BEGIN CERTIFICATE-----" in cert_data:
-        cert = x509.load_pem_x509_certificate(cert_data, default_backend())
-    else:
-        cert = x509.load_der_x509_certificate(cert_data, default_backend())
-    thumbprint = cert.fingerprint(hashes.SHA1()).hex().upper()
-    return thumbprint
+def send_feishu_message(webhook, msg, secret=""):
+    try:
+        ts = str(int(time.time()))
+        data = {"msg_type": "text", "content": {"text": msg}}
+        if secret:
+            sign_str = f"{ts}\n{secret}"
+            hmac_code = hmac.new(sign_str.encode("utf-8"), digestmod=hashlib.sha256).digest()
+            data.update({"timestamp": ts, "sign": base64.b64encode(hmac_code).decode("utf-8")})
+        resp = requests.post(webhook, json=data, timeout=10)
+        return resp.status_code == 200 and resp.json().get("code") == 0
+    except Exception as e:
+        print(f"Feishu Error: {e}")
+        return False
 
+# === SMTP Function ===
+def send_smtp_message(host, port, user, pwd, to_addr, msg_content):
+    try:
+        subject = "Azure Credential Expiry Alert"
+        
+        message = MIMEText(msg_content, 'plain', 'utf-8')
+        message['Subject'] = Header(subject, 'utf-8')
+        message['From'] = user
+        message['To'] = to_addr
+
+        # Determine SSL/TLS based on port
+        port = int(port)
+        if port == 465:
+            # SMTPS (SSL)
+            server = smtplib.SMTP_SSL(host, port, timeout=20)
+        else:
+            # STARTTLS or Plain
+            server = smtplib.SMTP(host, port, timeout=20)
+            if port == 587:
+                server.starttls()
+        
+        if user and pwd:
+            server.login(user, pwd)
+            
+        server.sendmail(user, [to_addr], message.as_string())
+        server.quit()
+        return True
+    except Exception as e:
+        print(f"SMTP Error: {e}")
+        return False
+
+# === Azure ===
 def get_msal_app():
-    """获取 MSAL 客户端单例，避免重复 IO"""
     global _MSAL_APP
     if _MSAL_APP is None:
-        try:
-            thumbprint = get_cert_thumbprint(CERT_PATH)
-            with open(KEY_PATH, "r") as f:
-                private_key = f.read()
-            
-            _MSAL_APP = msal.ConfidentialClientApplication(
-                CLIENT_ID,
-                authority=AUTHORITY,
-                client_credential={
-                    "thumbprint": thumbprint,
-                    "private_key": private_key,
-                }
-            )
-        except Exception as e:
-            print(f"❌ 初始化 MSAL 客户端失败 (请检查证书路径): {e}")
-            raise
+        with open(CERT_PATH, "rb") as f: cert_data = f.read()
+        cert = x509.load_pem_x509_certificate(cert_data, default_backend()) \
+            if b"BEGIN CERTIFICATE" in cert_data else x509.load_der_x509_certificate(cert_data, default_backend())
+        thumb = cert.fingerprint(hashes.SHA1()).hex().upper()
+        with open(KEY_PATH, "r") as f: key = f.read()
+        _MSAL_APP = msal.ConfidentialClientApplication(CLIENT_ID, authority=AUTHORITY, client_credential={"thumbprint": thumb, "private_key": key})
     return _MSAL_APP
 
-def get_access_token():
+def fetch_expiring(days, no_pwd, show_all):
     app_msal = get_msal_app()
-    # MSAL 库会自动处理 Token 缓存和刷新
-    result = app_msal.acquire_token_for_client(scopes=GRAPH_API_SCOPE)
-    
-    if "access_token" in result:
-        if DEBUG_TOKEN:
-            try:
-                decoded = jwt.decode(result["access_token"], options={"verify_signature": False})
-                print("DEBUG token info:", {"roles": decoded.get("roles"), "exp": decoded.get("exp")})
-            except:
-                pass
-        return result["access_token"]
-    else:
-        # 如果获取失败（如证书过期），重置 app 实例以便下次重试
+    res = app_msal.acquire_token_for_client(scopes=GRAPH_API_SCOPE)
+    if "access_token" not in res: 
         global _MSAL_APP
         _MSAL_APP = None
-        raise Exception(f"获取令牌失败: {result.get('error_description', result)}")
-
-# === 核心逻辑 ===
-def fetch_expiring(threshold_days: int, show_without_password: bool, show_all: bool = False):
-    token = get_access_token()
-    headers = {"Authorization": f"Bearer {token}"}
-
-    cutoff = None if show_all else datetime.now(timezone.utc) + timedelta(days=threshold_days)
-    params = {
-        "$select": "id,displayName,appId,passwordCredentials,keyCredentials",
-        "$top": "999",
-    }
+        raise Exception("Token failed")
     
+    headers = {"Authorization": f"Bearer {res['access_token']}"}
+    cutoff = None if show_all else datetime.now(timezone.utc) + timedelta(days=days)
     url = GRAPH_API_URL
-    expiring = []
-
+    items = []
+    
     while url:
-        resp = requests.get(url, headers=headers, params=params)
-        resp.raise_for_status()
-        data = resp.json()
-
-        for app_obj in data.get("value", []):
-            name = app_obj.get("displayName", "Unknown")
-            app_id = app_obj.get("appId")
-
-            password_creds = app_obj.get("passwordCredentials", []) or []
-            key_creds = app_obj.get("keyCredentials", []) or []
-
-            has_any_credential = len(password_creds) > 0 or len(key_creds) > 0
-
-            if not has_any_credential and not show_without_password:
-                continue
+        r = requests.get(url, headers=headers, params={"$select": "id,displayName,appId,passwordCredentials,keyCredentials", "$top": "999"} if url==GRAPH_API_URL else None)
+        r.raise_for_status()
+        d = r.json()
+        for app in d.get("value", []):
+            p_creds = app.get("passwordCredentials", [])
+            k_creds = app.get("keyCredentials", [])
+            if not (p_creds or k_creds) and not no_pwd: continue
             
-            # 检查 Secret
-            for cred in password_creds:
-                end_dt_str = cred.get("endDateTime")
-                if not end_dt_str: continue
-                try:
-                    end_dt = datetime.fromisoformat(end_dt_str.replace("Z", "+00:00"))
-                except ValueError: continue
-                
-                if show_all or (cutoff and end_dt <= cutoff):
-                    expiring.append({
-                        "type": "Client Secret",
-                        "app_name": name,
-                        "app_id": app_id,
-                        "cred_name": cred.get("displayName") or "Unnamed",
-                        "expires_on": end_dt
-                    })
-
-            # 检查证书
-            for cert in key_creds:
-                if cert.get("usage") and cert.get("usage") != "Verify":
-                    continue
-                end_dt_str = cert.get("endDateTime")
-                if not end_dt_str: continue
-                try:
-                    end_dt = datetime.fromisoformat(end_dt_str.replace("Z", "+00:00"))
-                except ValueError: continue
-                
-                if show_all or (cutoff and end_dt <= cutoff):
-                    expiring.append({
-                        "type": "Certificate",
-                        "app_name": name,
-                        "app_id": app_id,
-                        "cred_name": cert.get("displayName") or "Unnamed",
-                        "expires_on": end_dt
-                    })
-
-        # 分页处理
-        next_link = data.get("@odata.nextLink")
-        if next_link:
-            url = next_link
-            params = None # nextLink 已经包含了参数
-        else:
-            url = None
-
-    # 排序：Secret在前，然后按过期时间
-    type_weight = {"Client Secret": 0, "Certificate": 1}
-    expiring.sort(key=lambda x: (type_weight.get(x["type"], 99), x["expires_on"]))
-
-    # 格式化输出日期
-    for item in expiring:
-        item["expires_on"] = format_expiry_date(item["expires_on"])
-
-    return expiring
-
-def perform_alert_check_and_send(force=False):
-    config = load_alert_config()
-    webhook = config.get("dingtalk_webhook", "").strip()
-    secret = config.get("dingtalk_secret", "").strip()
-    threshold = config.get("alert_threshold_days", 30)
-    min_interval = config.get("min_alert_interval_hours", 24)
-
-    if not webhook:
-        return {"status": "skipped", "message": "未配置钉钉 Webhook"}
-
-    try:
-        items = fetch_expiring(threshold, show_without_password=True, show_all=False)
-        ignored_app_ids = set(config.get("ignored_app_ids", []))
-        last_alerted = load_last_alerted_times()
-        now = datetime.now(timezone.utc)
-        new_alerts = []
-
-        for item in items:
-            app_id = item["app_id"]
-            cred_name = item["cred_name"]
+            for c in p_creds:
+                if not c.get("endDateTime"): continue
+                dt = datetime.fromisoformat(c["endDateTime"].replace("Z", "+00:00"))
+                if show_all or (cutoff and dt <= cutoff):
+                    items.append({"type": "Client Secret", "app_name": app.get("displayName"), "app_id": app.get("appId"), "cred_name": c.get("displayName"), "expires_on": format_expiry_date(dt)})
             
-            if not app_id or not cred_name: continue
-            if app_id in ignored_app_ids: continue
-
-            key = f"{app_id}|{cred_name}"
-            last_time_str = last_alerted.get(key)
-            
-            can_alert = True
-            if not force and last_time_str:
-                try:
-                    last_time = datetime.fromisoformat(last_time_str.replace("Z", "+00:00"))
-                    # 检查是否在静默期内
-                    if (now - last_time).total_seconds() < min_interval * 3600:
-                        can_alert = False
-                except:
-                    pass # 解析失败则默认发送
-
-            if can_alert:
-                new_alerts.append(item)
-
-        if not new_alerts:
-            msg = "无新告警（可能已在静默期）"
-            return {"status": "no_alert", "message": msg}
-
-        # 构建钉钉消息
-        msg = f"[Azure 凭据到期告警]\n以下凭据将在 {threshold} 天内到期，请及时处理：\n\n"
-        for item in new_alerts:
-            expiry_date = item["expires_on"]
-            try:
-                # 简单计算剩余天数用于显示
-                expiry_dt = datetime.strptime(expiry_date, '%Y-%m-%d')
-                days_left = (expiry_dt - now.replace(tzinfo=None)).days
-                days_txt = f"剩余 {days_left} 天" if days_left >= 0 else f"已过期 {-days_left} 天"
-            except:
-                days_txt = ""
-            
-            msg += f"• {item['type']} | {item['app_name']}\n"
-            msg += f"  AppID: {item['app_id']}\n"
-            msg += f"  凭据: {item['cred_name']} | 到期: {expiry_date} ({days_txt})\n\n"
-
-        if send_dingtalk_message(webhook, msg, secret):
-            # 更新告警时间
-            for item in new_alerts:
-                key = f"{item['app_id']}|{item['cred_name']}"
-                last_alerted[key] = now.isoformat()
-            save_last_alerted_times(last_alerted)
-            
-            return {
-                "status": "success", 
-                "message": f"成功发送 {len(new_alerts)} 条告警",
-                "count": len(new_alerts)
-            }
-        else:
-            return {"status": "failed", "message": "钉钉消息发送失败"}
-
-    except Exception as e:
-        error_msg = f"告警检查异常: {str(e)}"
-        print(error_msg)
-        return {"status": "error", "message": error_msg}
-
-# === Flask 路由 ===
-@app.get("/api/expiring")
-def api_expiring():
-    try:
-        days = request.args.get("days", type=int) or DEFAULT_EXPIRY_THRESHOLD_DAYS
-        show_without_pwd_param = request.args.get("showWithoutPassword")
-        show_all_param = request.args.get("showAll")
-
-        show_without_pwd = DEFAULT_SHOW_APPS_WITHOUT_PASSWORD
-        if show_without_pwd_param is not None:
-            show_without_pwd = show_without_pwd_param.lower() in ("1", "true", "yes", "y")
-
-        show_all = show_all_param is not None and show_all_param.lower() in ("1", "true", "yes", "y")
-
-        # 使用参数元组作为缓存 Key
-        params_key = (days, show_without_pwd, show_all)
-
-        cached_items, fetched_at = CACHE.get(params_key)
-        if cached_items is not None:
-            return jsonify({
-                "params": {"days": days, "showWithoutPassword": show_without_pwd, "showAll": show_all},
-                "cached": True,
-                "items": cached_items,
-                "fetched_at": fetched_at
-            })
-
-        items = fetch_expiring(days, show_without_pwd, show_all)
-        CACHE.set(params_key, items)
+            for k in k_creds:
+                if k.get("usage") != "Verify" or not k.get("endDateTime"): continue
+                dt = datetime.fromisoformat(k["endDateTime"].replace("Z", "+00:00"))
+                if show_all or (cutoff and dt <= cutoff):
+                    items.append({"type": "Certificate", "app_name": app.get("displayName"), "app_id": app.get("appId"), "cred_name": k.get("displayName"), "expires_on": format_expiry_date(dt)})
         
-        # 重新获取时间戳
-        _, new_fetched_at = CACHE.get(params_key)
+        url = d.get("@odata.nextLink")
+    
+    items.sort(key=lambda x: (0 if x["type"]=="Client Secret" else 1, x["expires_on"]))
+    return items
 
-        return jsonify({
-            "params": {"days": days, "showWithoutPassword": show_without_pwd, "showAll": show_all},
-            "cached": False,
-            "items": items,
-            "fetched_at": new_fetched_at or time.time()
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+def check_alert(force=False):
+    cfg = load_alert_config()
+    channel = cfg.get("active_channel", "dingtalk")
+    threshold = int(cfg.get("alert_threshold_days", 30))
+    min_int = int(cfg.get("min_alert_interval_hours", 24))
+    
+    try:
+        items = fetch_expiring(threshold, True, False)
+        ignored = set(cfg.get("ignored_app_ids", []))
+        last = load_last_alerted()
+        now = datetime.now(timezone.utc)
+        alerts = []
+        
+        for i in items:
+            if i["app_id"] in ignored: continue
+            key = f"{i['app_id']}|{i['cred_name']}"
+            last_ts = last.get(key)
+            if not force and last_ts:
+                if (now - datetime.fromisoformat(last_ts)).total_seconds() < min_int*3600: continue
+            alerts.append(i)
+            
+        if not alerts: return {"status": "no_alert", "message": "No new alerts"}
+        
+        msg = f"[Azure Expiry Alert]\nFound {len(alerts)} credentials expiring in {threshold} days:\n\n"
+        for i in alerts: msg += f"- {i['type']}: {i['app_name']}\n  ID: {i['app_id']}\n  Cred: {i['cred_name']} ({i['expires_on']})\n\n"
+        
+        logs = []
+        
+        # === Check Channels (UPDATED: Removed combined options) ===
+        
+        # DingTalk Only
+        if channel == "dingtalk":
+            if cfg.get("dingtalk_webhook"):
+                logs.append("DingTalk: " + ("OK" if send_dingtalk_message(cfg["dingtalk_webhook"], msg, cfg.get("dingtalk_secret")) else "Fail"))
+        
+        # Feishu Only
+        elif channel == "feishu":
+            if cfg.get("feishu_webhook"):
+                logs.append("Feishu: " + ("OK" if send_feishu_message(cfg["feishu_webhook"], msg, cfg.get("feishu_secret")) else "Fail"))
+        
+        # SMTP (Email) Only
+        elif channel == "email":
+            if cfg.get("smtp_host") and cfg.get("smtp_to_email"):
+                res = send_smtp_message(
+                    cfg["smtp_host"], 
+                    cfg.get("smtp_port", 25), 
+                    cfg.get("smtp_user"), 
+                    cfg.get("smtp_password"), 
+                    cfg["smtp_to_email"], 
+                    msg
+                )
+                logs.append("SMTP: " + ("OK" if res else "Fail"))
 
-@app.get("/health")
-def health_check():
-    return jsonify({
-        "status": "healthy",
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    })
+        if any("OK" in l for l in logs):
+            for i in alerts: last[f"{i['app_id']}|{i['cred_name']}"] = now.isoformat()
+            save_last_alerted(last)
+            return {"status": "success", "message": ", ".join(logs)}
+        return {"status": "failed", "message": ", ".join(logs) if logs else "No channel active"}
+        
+    except Exception as e: return {"status": "error", "message": str(e)}
+
+# === Routes ===
+@app.get("/")
+def index(): return render_template("index.html", default_days=DEFAULT_EXPIRY_THRESHOLD_DAYS, show_without_password=DEFAULT_SHOW_APPS_WITHOUT_PASSWORD, cache_ttl=CACHE_TTL_SECONDS)
+
+@app.get("/api/expiring")
+def api_get():
+    days = request.args.get("days", type=int) or DEFAULT_EXPIRY_THRESHOLD_DAYS
+    no_pwd = request.args.get("showWithoutPassword") == "true"
+    show_all = request.args.get("showAll") == "true"
+    key = (days, no_pwd, show_all)
+    d, ts = CACHE.get(key)
+    if d: return jsonify({"items": d, "cached": True})
+    items = fetch_expiring(days, no_pwd, show_all)
+    CACHE.set(key, items)
+    return jsonify({"items": items, "cached": False})
 
 @app.get("/api/alert/config")
-def get_alert_config_api():
-    return jsonify(load_alert_config())
+def get_cfg(): return jsonify(load_alert_config())
 
 @app.post("/api/alert/config")
-def update_alert_config():
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "无效的 JSON 数据"}), 400
-
-    # 简单验证
-    try:
-        threshold = int(data.get("alert_threshold_days", 30))
-        check_interval = int(data.get("alert_check_interval_hours", 24))
-        min_interval = int(data.get("min_alert_interval_hours", 24))
-    except ValueError:
-        return jsonify({"error": "数值参数必须为整数"}), 400
-
-    config = load_alert_config()
-    config["dingtalk_webhook"] = (data.get("dingtalk_webhook") or "").strip()
-    config["dingtalk_secret"] = (data.get("dingtalk_secret") or "").strip()
-    config["alert_threshold_days"] = threshold
-    config["alert_check_interval_hours"] = check_interval
-    config["min_alert_interval_hours"] = min_interval
+def set_cfg():
+    c = load_alert_config()
+    d = request.json
     
-    save_alert_config(config)
-    return jsonify({"status": "success", "message": "配置已更新"})
+    # Update regular keys
+    fields_to_save = [
+        "active_channel", 
+        "dingtalk_webhook", "dingtalk_secret", 
+        "feishu_webhook", "feishu_secret",
+        "smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_to_email"
+    ]
+    
+    c.update({k: d.get(k, "").strip() for k in fields_to_save})
+    
+    # Update integer keys
+    for k in ["alert_threshold_days", "alert_check_interval_hours", "min_alert_interval_hours"]:
+        c[k] = int(d.get(k, c.get(k, 24)))
+        
+    save_alert_config(c)
+    return jsonify({"status": "ok"})
 
 @app.post("/api/alert/trigger")
-def trigger_alert_now():
-    result = perform_alert_check_and_send(force=True)
-    status_code = 500 if result["status"] == "error" else 200
-    return jsonify(result), status_code
+def trigger(): return jsonify(check_alert(True))
 
 @app.get("/api/alert/ignored")
-def get_ignored_app_details():
-    config = load_alert_config()
-    ignored_app_ids = set(config.get("ignored_app_ids", []))
-    if not ignored_app_ids:
-        return jsonify([])
-    # 这里为了性能，仅返回 ID 列表，如果需要详情可以前端调 expiring 接口匹配，
-    # 或者像原来一样调 fetch_expiring 但这会较慢。
-    return jsonify(list(ignored_app_ids))
+def get_ign(): return jsonify(load_alert_config().get("ignored_app_ids", []))
 
 @app.post("/api/alert/ignored")
-def add_ignored_app_id():
-    data = request.get_json()
-    app_id = (data.get("app_id") or "").strip()
-    if not app_id: return jsonify({"error": "app_id required"}), 400
-
-    config = load_alert_config()
-    ignored = config.setdefault("ignored_app_ids", [])
-    if app_id not in ignored:
-        ignored.append(app_id)
-        save_alert_config(config)
-    return jsonify({"status": "ignored", "app_id": app_id})
+def add_ign():
+    c = load_alert_config()
+    aid = request.json.get("app_id", "").strip()
+    if aid and aid not in c.setdefault("ignored_app_ids", []):
+        c["ignored_app_ids"].append(aid)
+        save_alert_config(c)
+    return jsonify({"status": "ok"})
 
 @app.delete("/api/alert/ignored")
-def remove_ignored_app_id():
-    data = request.get_json()
-    app_id = (data.get("app_id") or "").strip()
-    config = load_alert_config()
-    ignored = config.get("ignored_app_ids", [])
-    if app_id in ignored:
-        config["ignored_app_ids"] = [x for x in ignored if x != app_id]
-        save_alert_config(config)
-    return jsonify({"status": "removed", "app_id": app_id})
+def del_ign():
+    c = load_alert_config()
+    aid = request.json.get("app_id", "").strip()
+    if aid in c.get("ignored_app_ids", []):
+        c["ignored_app_ids"].remove(aid)
+        save_alert_config(c)
+    return jsonify({"status": "ok"})
 
-@app.get("/")
-def index():
-    return render_template(
-        "index.html",
-        default_days=DEFAULT_EXPIRY_THRESHOLD_DAYS,
-        show_without_password=DEFAULT_SHOW_APPS_WITHOUT_PASSWORD,
-        cache_ttl=CACHE_TTL_SECONDS
-    )
-
-# === 后台线程 (优化循环) ===
-def alert_check_worker():
-    print("✅ 告警检查线程已启动")
+def worker():
     while True:
         try:
-            # 1. 执行任务
-            result = perform_alert_check_and_send(force=False)
-            if result["status"] != "no_alert":
-                print(f"🔔 告警检查结果: {result['message']}")
-            
-            # 2. 获取休眠时间
-            config = load_alert_config()
-            interval_hours = config.get("alert_check_interval_hours", 24)
-            sleep_seconds = interval_hours * 3600
-            
-            # 3. 循环小睡，每10秒检查一次（这里只是模拟，实际为了能响应退出信号）
-            # 简单的 sleep 在这里也是可以的，因为脚本主要跑在 Docker/Systemd
-            time.sleep(sleep_seconds)
-
-        except Exception as e:
-            print(f"⚠️ 告警线程异常: {e}")
-            time.sleep(300) # 出错后等待5分钟
+            check_alert(False)
+            hrs = int(load_alert_config().get("alert_check_interval_hours", 24))
+            for _ in range(hrs * 360): time.sleep(10)
+        except: time.sleep(300)
 
 if __name__ == "__main__":
-    # 确保目录存在
-    BASE_DIR.joinpath("templates").mkdir(parents=True, exist_ok=True)
-    BASE_DIR.joinpath("static").mkdir(parents=True, exist_ok=True)
-
-    # 启动后台线程
-    alert_thread = threading.Thread(target=alert_check_worker, daemon=True)
-    alert_thread.start()
-
-    # 启动 Flask
-    app.run(
-        host=os.getenv("HOST", "0.0.0.0"),
-        port=PORT,
-        debug=os.getenv("FLASK_DEBUG", "0") == "1",
-        threaded=True  # 显式开启多线程
-    )
+    BASE_DIR.joinpath("templates").mkdir(exist_ok=True)
+    threading.Thread(target=worker, daemon=True).start()
+    app.run(host="0.0.0.0", port=PORT, debug=os.getenv("DEBUG")=="1", threaded=True)

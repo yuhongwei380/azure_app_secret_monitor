@@ -9,1205 +9,516 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
 <style>
 :root {
---primary-color: #0078d4;
---primary-dark: #005a9e;
---warning-color: #ff9800;
---danger-color: #f44336;
---success-color: #4caf50;
---light-bg: #f8f9fa;
---dark-bg: #1a1a1a;
---card-bg: #ffffff;
---text-primary: #2c3e50;
---text-secondary: #7f8c8d;
---border-color: #e9ecef;
---shadow-light: 0 4px 6px rgba(0,0,0,0.05);
---shadow-medium: 0 10px 25px rgba(0,0,0,0.1);
---shadow-heavy: 0 20px 40px rgba(0,0,0,0.15);
---header-gradient: linear-gradient(135deg, #0078d4, #005a9e);
+    --primary-color: #0078d4;
+    --primary-dark: #005a9e;
+    --warning-color: #ff9800;
+    --danger-color: #f44336;
+    --success-color: #4caf50;
+    --light-bg: #f8f9fa;
+    --card-bg: #ffffff;
+    --text-primary: #2c3e50;
+    --border-color: #e9ecef;
+    --shadow-medium: 0 10px 25px rgba(0,0,0,0.1);
+    --shadow-heavy: 0 20px 40px rgba(0,0,0,0.15);
+    --header-gradient: linear-gradient(135deg, #0078d4, #005a9e);
 }
 body {
-background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-min-height: 100vh;
-font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-color: var(--text-primary);
-line-height: 1.6;
-padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    font-family: 'Inter', sans-serif;
+    color: var(--text-primary);
+    padding: 20px;
 }
 .main-container {
-background: rgba(255, 255, 255, 0.98);
-border-radius: 20px;
-box-shadow: var(--shadow-heavy);
-margin: 0 auto;
-max-width: 1400px;
-overflow: hidden;
-backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.98);
+    border-radius: 20px;
+    box-shadow: var(--shadow-heavy);
+    margin: 0 auto;
+    max-width: 1400px;
+    overflow: hidden;
+    backdrop-filter: blur(10px);
 }
 .header-section {
-background: var(--header-gradient);
-color: white;
-padding: 30px;
-border-radius: 20px;
-margin: 20px;
-position: relative;
-overflow: hidden;
-display: flex;
-align-items: center;
-justify-content: space-between;
-box-shadow: var(--shadow-medium);
+    background: var(--header-gradient);
+    color: white;
+    padding: 30px;
+    border-radius: 20px;
+    margin: 20px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: var(--shadow-medium);
 }
 .header-section::before {
-content: '';
-position: absolute;
-top: 0;
-left: 0;
-right: 0;
-bottom: 0;
-background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="rgba(255,255,255,0.1)"/><circle cx="75" cy="75" r="1" fill="rgba(255,255,255,0.1)"/><circle cx="50" cy="10" r="0.5" fill="rgba(255,255,255,0.05)"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
-opacity: 0.1;
-}
-.header-content {
-display: flex;
-align-items: center;
-gap: 20px;
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="rgba(255,255,255,0.1)"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
+    opacity: 0.1;
 }
 .app-logo {
-width: 60px;
-height: 60px;
-background: white;
-border-radius: 15px;
-display: flex;
-align-items: center;
-justify-content: center;
-box-shadow: var(--shadow-light);
+    width: 60px; height: 60px;
+    background: white; border-radius: 15px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
 }
-.header-title {
-font-weight: 600;
-font-size: 1.5rem;
-margin-bottom: 0;
-display: flex;
-align-items: center;
-gap: 10px;
-}
-.header-subtitle {
-font-size: 0.9rem;
-opacity: 0.8;
-margin-bottom: 0;
-}
-.last-updated {
-font-size: 0.9rem;
-color: rgba(255,255,255,0.8);
-font-weight: 500;
-text-align: right;
-}
-.main-content {
-padding: 0 20px 20px 20px;
-}
-.stats-grid {
-display: grid;
-grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-gap: 20px;
-margin: 30px 0;
-}
+.header-title { font-weight: 600; font-size: 1.5rem; margin-bottom: 0; display: flex; align-items: center; gap: 10px; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 30px 20px; }
 .stats-card {
-background: var(--card-bg);
-border-radius: 16px;
-padding: 24px;
-margin-bottom: 0;
-box-shadow: var(--shadow-light);
-transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-border: 1px solid var(--border-color);
-position: relative;
-overflow: hidden;
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid var(--border-color);
+    position: relative;
+    overflow: hidden;
 }
+.stats-card:hover { transform: translateY(-5px); box-shadow: var(--shadow-medium); }
 .stats-card::before {
-content: '';
-position: absolute;
-top: 0;
-left: 0;
-right: 0;
-height: 4px;
-background: var(--primary-color);
-transform: scaleX(0);
-transition: transform 0.3s ease;
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+    background: var(--primary-color); transform: scaleX(0); transition: transform 0.3s ease;
 }
-.stats-card:hover {
-transform: translateY(-8px);
-box-shadow: var(--shadow-medium);
-}
-.stats-card:hover::before {
-transform: scaleX(1);
-}
-.stats-card.warning::before {
-background: var(--warning-color);
-}
-.stats-card.danger::before {
-background: var(--danger-color);
-}
-.stats-card.success::before {
-background: var(--success-color);
-}
+.stats-card:hover::before { transform: scaleX(1); }
+.stats-card.warning::before { background: var(--warning-color); }
+.stats-card.danger::before { background: var(--danger-color); }
 .stats-icon {
-width: 60px;
-height: 60px;
-border-radius: 12px;
-display: flex;
-align-items: center;
-justify-content: center;
-margin-bottom: 16px;
-font-size: 24px;
-color: white;
+    width: 50px; height: 50px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 16px; font-size: 24px; color: white;
 }
 .stats-icon.primary { background: linear-gradient(135deg, var(--primary-color), var(--primary-dark)); }
 .stats-icon.warning { background: linear-gradient(135deg, var(--warning-color), #e68a00); }
 .stats-icon.danger { background: linear-gradient(135deg, var(--danger-color), #d32f2f); }
-.stats-icon.success { background: linear-gradient(135deg, var(--success-color), #388e3c); }
 .filter-section {
-background: var(--light-bg);
-padding: 24px;
-margin: 20px 0;
-border-radius: 16px;
-box-shadow: var(--shadow-light);
-}
-.table-container {
-background: var(--card-bg);
-border-radius: 16px;
-overflow: hidden;
-box-shadow: var(--shadow-light);
-margin: 0;
-}
-.table thead th {
-background: var(--light-bg);
-font-weight: 600;
-color: var(--text-primary);
-border-bottom: 2px solid var(--border-color);
-}
-.table-hover tbody tr:hover {
-background-color: rgba(0, 120, 212, 0.05);
-}
-.credential-type {
-display: inline-block;
-padding: 6px 14px;
-border-radius: 20px;
-font-size: 13px;
-font-weight: 600;
-text-transform: uppercase;
-letter-spacing: 0.5px;
-}
-.credential-secret {
-background: linear-gradient(135deg, #e3f2fd, #bbdefb);
-color: var(--primary-color);
-}
-.credential-cert {
-background: linear-gradient(135deg, #f5f5f5, #e0e0e0);
-color: #6c757d;
-}
-.expiry-badge {
-padding: 6px 12px;
-border-radius: 20px;
-font-size: 12px;
-font-weight: 600;
-display: inline-flex;
-align-items: center;
-gap: 4px;
-}
-.expiry-critical { background: linear-gradient(135deg, #ffebee, #ffcdd2); color: var(--danger-color); }
-.expiry-warning { background: linear-gradient(135deg, #fff8e1, #ffecb3); color: var(--warning-color); }
-.expiry-safe { background: linear-gradient(135deg, #e8f5e8, #c8e6c9); color: var(--success-color); }
-.badge {
-font-weight: 500;
-padding: 6px 12px;
-border-radius: 20px;
-}
-.loading-overlay {
-position: fixed;
-top: 0;
-left: 0;
-right: 0;
-bottom: 0;
-background: rgba(0,0,0,0.7);
-display: flex;
-align-items: center;
-justify-content: center;
-z-index: 9999;
-backdrop-filter: blur(5px);
-}
-.spinner {
-width: 60px;
-height: 60px;
-border: 4px solid rgba(255,255,255,0.3);
-border-top: 4px solid var(--primary-color);
-border-radius: 50%;
-animation: spin 1s linear infinite;
-}
-@keyframes spin {
-0% { transform: rotate(0deg); }
-100% { transform: rotate(360deg); }
-}
-.btn {
-border-radius: 10px;
-font-weight: 500;
-transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.btn:hover {
-transform: translateY(-2px);
-box-shadow: var(--shadow-medium);
-}
-.form-control, .form-select {
-border-radius: 10px;
-border: 2px solid var(--border-color);
-padding: 10px 14px;
-transition: all 0.3s ease;
-}
-.form-control:focus, .form-select:focus {
-border-color: var(--primary-color);
-box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.1);
-}
-.form-check-input:checked {
-background-color: var(--primary-color);
-border-color: var(--primary-color);
-}
-.table-footer {
-background: var(--light-bg);
-border-top: 2px solid var(--border-color);
-}
-.notification-toast {
-position: fixed;
-top: 20px;
-right: 20px;
-z-index: 1050;
-min-width: 350px;
-animation: slideIn 0.3s ease-out;
-}
-@keyframes slideIn {
-from {
-transform: translateX(100%);
-opacity: 0;
-}
-to {
-transform: translateX(0);
-opacity: 1;
-}
-}
-.section-title {
-font-weight: 600;
-color: var(--text-primary);
-margin-bottom: 20px;
-display: flex;
-align-items: center;
-gap: 10px;
-}
-.section-title i {
-color: var(--primary-color);
-}
-.collapsible-section {
-background: var(--light-bg);
-border-radius: 16px;
-margin: 20px 0;
-box-shadow: var(--shadow-light);
-overflow: hidden;
-}
-.collapsible-header {
-padding: 20px 24px;
-cursor: pointer;
-display: flex;
-align-items: center;
-justify-content: space-between;
-background: var(--card-bg);
-border-bottom: 1px solid var(--border-color);
-}
-.collapsible-header:hover {
-background: rgba(0, 120, 212, 0.05);
-}
-.collapsible-content {
-padding: 24px;
-display: none;
-background: var(--card-bg);
-}
-.collapsible-content.show {
-display: block;
-}
-.collapsible-toggle {
-width: 24px;
-height: 24px;
-border-radius: 50%;
-background: var(--primary-color);
-color: white;
-display: flex;
-align-items: center;
-justify-content: center;
-font-weight: bold;
-transition: transform 0.3s ease;
-}
-.collapsible-toggle.collapsed { transform: rotate(0deg); }
-.collapsible-toggle.expanded { transform: rotate(180deg); }
-.filter-group {
-display: flex;
-align-items: center;
-gap: 16px;
-margin-bottom: 20px;
-flex-wrap: nowrap;
-overflow-x: auto;
-}
-.filter-item {
-display: flex;
-align-items: center;
-gap: 8px;
-flex-shrink: 0;
-}
-.filter-item:has(#searchInput) {
-flex: 1;
-min-width: 200px;
-max-width: 400px;
-}
-.filter-label {
-font-weight: 500;
-color: var(--text-secondary);
-white-space: nowrap;
-font-size: 0.9rem;
-}
-.input-group {
-width: auto !important;
-min-width: 100px;
-}
-#days {
-width: 100px;
-}
-#typeFilter {
-min-width: 120px;
-width: 120px;
-}
-#searchInput {
-min-width: 200px;
-max-width: 100%;
-}
-#searchInput:focus {
-border-color: var(--primary-color);
-box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.1);
-}
-.refresh-btn {
-background: var(--primary-color);
-color: white;
-border: none;
-padding: 10px 16px;
-font-weight: 600;
-display: flex;
-align-items: center;
-gap: 8px;
-white-space: nowrap;
-flex-shrink: 0;
-}
-.refresh-btn:hover {
-background: var(--primary-dark);
-}
-.action-buttons {
-display: flex;
-gap: 10px;
-flex-wrap: wrap;
-}
-.info-text {
-font-size: 0.85rem;
-color: var(--text-secondary);
-display: flex;
-align-items: center;
-gap: 5px;
-margin-top: 10px;
-}
-.info-icon {
-color: var(--text-secondary);
-}
-@media (max-width: 768px) {
-body {
-padding: 10px;
-}
-.main-container {
-border-radius: 16px;
-}
-.header-section {
-padding: 20px;
-margin: 15px;
-flex-direction: column;
-align-items: flex-start;
-border-radius: 16px;
-}
-.header-content {
-width: 100%;
-flex-direction: column;
-align-items: flex-start;
-gap: 15px;
-}
-.last-updated {
-width: 100%;
-text-align: left;
-margin-top: 15px;
-}
-.main-content {
-padding: 0 15px 15px 15px;
-}
-.stats-grid {
-grid-template-columns: 1fr;
-}
-.app-logo {
-width: 50px;
-height: 50px;
-}
-.filter-group {
-flex-direction: column;
-align-items: stretch;
-gap: 16px;
-flex-wrap: wrap;
-}
-.filter-item {
-min-width: unset;
-width: 100%;
-}
-.filter-item:has(#searchInput) {
-max-width: 100%;
-}
-.filter-label {
-font-size: 0.85rem;
-}
-.action-buttons {
-width: 100%;
-flex-direction: column;
-}
-.collapsible-header {
-padding: 16px 20px;
-}
-.collapsible-content {
-padding: 16px 20px;
-}
-.table-container {
-border-radius: 16px;
-}
-}
-.pulse-animation {
-animation: pulse 2s infinite;
-}
-@keyframes pulse {
-0% { box-shadow: 0 0 0 0 rgba(0, 120, 212, 0.4); }
-70% { box-shadow: 0 0 0 10px rgba(0, 120, 212, 0); }
-100% { box-shadow: 0 0 0 0 rgba(0, 120, 212, 0); }
-}
-.glow-animation {
-animation: glow 2s ease-in-out infinite alternate;
-}
-@keyframes glow {
-from { box-shadow: 0 0 5px rgba(0, 120, 212, 0.3); }
-to { box-shadow: 0 0 20px rgba(0, 120, 212, 0.6); }
-}
+    background: var(--light-bg); padding: 24px; margin: 0 20px 20px;
+    border-radius: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+.filter-group { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+.table-container { margin: 0 20px 20px; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); background: white; }
+.table thead th { background: var(--light-bg); font-weight: 600; border-bottom: 2px solid var(--border-color); }
+.credential-type { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: bold; text-transform: uppercase; }
+.credential-secret { background: #e3f2fd; color: var(--primary-color); }
+.credential-cert { background: #f5f5f5; color: #6c757d; }
+.expiry-badge { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.expiry-critical { background: #ffebee; color: var(--danger-color); }
+.expiry-warning { background: #fff8e1; color: var(--warning-color); }
+.expiry-safe { background: #e8f5e8; color: var(--success-color); }
+.collapsible-section { margin: 20px; border-radius: 16px; overflow: hidden; background: white; border: 1px solid var(--border-color); }
+.collapsible-header { padding: 20px; cursor: pointer; background: white; display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
+.collapsible-header:hover { background: #f8f9fa; }
+.collapsible-content { display: none; padding: 24px; border-top: 1px solid var(--border-color); background: #fcfcfc; }
+.collapsible-content.show { display: block; }
+.pulse-animation { animation: pulse 2s infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(0, 120, 212, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(0, 0, 0, 0); } 100% { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0); } }
+.glow-animation { animation: glow 2s ease-in-out infinite alternate; }
+@keyframes glow { from { box-shadow: 0 0 5px rgba(0, 120, 212, 0.3); } to { box-shadow: 0 0 20px rgba(0, 120, 212, 0.6); } }
 </style>
 </head>
 <body>
-<div class="container-fluid main-container">
-<div class="header-section">
-<div class="header-content">
-<div class="app-logo glow-animation">
-<i class="bi bi-shield-check text-primary" style="font-size: 28px;"></i>
-</div>
-<div>
-<h1 class="header-title"><i class="bi bi-graph-up"></i> Azure 应用凭据监控</h1>
-<p class="header-subtitle">实时监控和管理 Azure AD 应用凭据的到期时间</p>
-</div>
-</div>
-<div class="last-updated" id="lastUpdated">
-<i class="bi bi-clock-history"></i> 最后更新: 加载中...
-</div>
+<div class="main-container">
+    <!-- Header -->
+    <div class="header-section">
+        <div class="d-flex align-items-center gap-3">
+            <div class="app-logo glow-animation">
+                <i class="bi bi-shield-check text-primary" style="font-size: 28px;"></i>
+            </div>
+            <div>
+                <h1 class="header-title"><i class="bi bi-graph-up"></i> Azure 应用凭据监控</h1>
+                <p class="mb-0 opacity-75 small">实时监控和管理 Azure AD 应用凭据的到期时间</p>
+            </div>
+        </div>
+        <div class="text-end small opacity-75" id="lastUpdated">加载中...</div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+        <div class="stats-card pulse-animation">
+            <div class="stats-icon primary"><i class="bi bi-calendar-x"></i></div>
+            <h6 class="text-muted mb-1">即将到期总数</h6>
+            <h2 class="mb-0" id="statTotal">0</h2>
+        </div>
+        <div class="stats-card warning">
+            <div class="stats-icon warning"><i class="bi bi-key"></i></div>
+            <h6 class="text-muted mb-1">Secrets</h6>
+            <h2 class="mb-0" id="statSecrets">0</h2>
+        </div>
+        <div class="stats-card">
+            <div class="stats-icon" style="background: #6c757d"><i class="bi bi-file-earmark-lock"></i></div>
+            <h6 class="text-muted mb-1">Certificates</h6>
+            <h2 class="mb-0" id="statCerts">0</h2>
+        </div>
+        <div class="stats-card danger">
+            <div class="stats-icon danger"><i class="bi bi-exclamation-triangle"></i></div>
+            <h6 class="text-muted mb-1">7天内到期</h6>
+            <h2 class="mb-0" id="statCritical">0</h2>
+        </div>
+    </div>
+
+    <!-- Filter -->
+    <div class="filter-section">
+        <h6 class="mb-3 fw-bold text-secondary"><i class="bi bi-funnel me-2"></i>筛选配置</h6>
+        <div class="filter-group">
+            <div class="input-group" style="width: 180px;">
+                <span class="input-group-text"><i class="bi bi-calendar-range"></i></span>
+                <input type="number" class="form-control" id="days" value="{{ default_days }}" placeholder="天数">
+            </div>
+            <div class="d-flex align-items-center gap-3 bg-white px-3 py-2 rounded border">
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" id="showExpired" checked>
+                    <label class="form-check-label small" for="showExpired">已过期</label>
+                </div>
+                <div class="form-check form-switch mb-0">
+                    <input class="form-check-input" type="checkbox" id="showAll">
+                    <label class="form-check-label small" for="showAll">显示全部</label>
+                </div>
+            </div>
+            <div class="input-group flex-grow-1" style="max-width: 300px;">
+                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                <input type="text" class="form-control" id="searchInput" placeholder="搜索应用名称或ID...">
+            </div>
+            <button class="btn btn-primary" id="btnRefresh"><i class="bi bi-arrow-clockwise me-1"></i>刷新</button>
+            <button class="btn btn-outline-success" onclick="exportToCSV()"><i class="bi bi-download"></i> CSV</button>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="table-container">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th class="ps-4">类型</th>
+                    <th>应用名称</th>
+                    <th>App ID</th>
+                    <th>凭据名称</th>
+                    <th>到期时间 (UTC)</th>
+                    <th>状态</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <tr><td colspan="6" class="text-center py-5 text-muted">加载中...</td></tr>
+            </tbody>
+        </table>
+        <div class="p-3 bg-light text-end small text-muted border-top" id="tableFooter">共 0 条</div>
+    </div>
+
+    <!-- Alert Config (Collapsed) -->
+    <div class="collapsible-section">
+        <div class="collapsible-header" onclick="toggleCollapse('alertConfigContent', 'alertIcon')">
+            <span><i class="bi bi-bell-fill text-primary me-2"></i>告警通知配置 (钉钉 / 飞书 / Email)</span>
+            <i class="bi bi-chevron-down text-muted" id="alertIcon"></i>
+        </div>
+        <div class="collapsible-content" id="alertConfigContent">
+            
+            <!-- 渠道选择 -->
+            <div class="mb-4 pb-3 border-bottom">
+                <label class="form-label fw-bold text-primary"><i class="bi bi-broadcast me-2"></i>选择告警发送渠道</label>
+                <select class="form-select form-select-lg" id="activeChannel" onchange="toggleChannelConfig()" style="max-width: 400px;">
+                    <option value="dingtalk">钉钉 (DingTalk)</option>
+                    <option value="feishu">飞书 (Feishu/Lark)</option>
+                    <option value="email">邮件 (SMTP)</option>
+                </select>
+            </div>
+
+            <div class="row g-4">
+                <!-- 钉钉配置 -->
+                <div class="col-md-6 channel-group" id="dingtalkConfigGroup">
+                    <div class="card h-100 border-primary border-opacity-25 bg-primary bg-opacity-10">
+                        <div class="card-body">
+                            <h6 class="text-primary fw-bold mb-3"><i class="bi bi-robot"></i> 钉钉配置</h6>
+                            <div class="mb-3">
+                                <label class="form-label small">Webhook URL</label>
+                                <input type="text" class="form-control" id="dingtalkWebhook" placeholder="https://oapi.dingtalk.com/robot/send?...">
+                            </div>
+                            <div class="mb-0">
+                                <label class="form-label small">加签密钥 (SEC...)</label>
+                                <input type="text" class="form-control" id="dingtalkSecret" placeholder="SECxxxxxxxx">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 飞书配置 -->
+                <div class="col-md-6 channel-group" id="feishuConfigGroup" style="display: none;">
+                    <div class="card h-100 border-success border-opacity-25 bg-success bg-opacity-10">
+                        <div class="card-body">
+                            <h6 class="text-success fw-bold mb-3"><i class="bi bi-chat-dots"></i> 飞书配置</h6>
+                            <div class="mb-3">
+                                <label class="form-label small">Webhook URL</label>
+                                <input type="text" class="form-control" id="feishuWebhook" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/...">
+                            </div>
+                            <div class="mb-0">
+                                <label class="form-label small">签名校验密钥</label>
+                                <input type="text" class="form-control" id="feishuSecret" placeholder="可选密钥">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SMTP配置 -->
+                <div class="col-md-12 channel-group" id="smtpConfigGroup" style="display: none;">
+                    <div class="card h-100 border-info border-opacity-25 bg-info bg-opacity-10">
+                        <div class="card-body">
+                            <h6 class="text-info fw-bold mb-3" style="color: #0dcaf0!important; filter: brightness(0.6);"><i class="bi bi-envelope"></i> SMTP 邮件配置</h6>
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label class="form-label small">SMTP Host</label>
+                                    <input type="text" class="form-control" id="smtpHost" placeholder="smtp.office365.com">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small">Port</label>
+                                    <input type="number" class="form-control" id="smtpPort" placeholder="587">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small">收件人邮箱 (Receive Email)</label>
+                                    <input type="email" class="form-control" id="smtpTo" placeholder="admin@example.com">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small">发送账号 (User)</label>
+                                    <input type="text" class="form-control" id="smtpUser" placeholder="sender@example.com">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small">密码 (Password)</label>
+                                    <input type="password" class="form-control" id="smtpPass" placeholder="Password or App Password">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 通用策略 -->
+                <div class="col-12 mt-4">
+                    <h6 class="text-secondary border-bottom pb-2 mb-3">通用策略设置</h6>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">告警阈值 (天)</label>
+                            <input type="number" class="form-control" id="alertDays">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">检查间隔 (小时)</label>
+                            <input type="number" class="form-control" id="alertInterval">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">最小静默期 (小时)</label>
+                            <input type="number" class="form-control" id="minAlertInterval">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 mt-4 text-end">
+                    <button class="btn btn-outline-primary me-2" onclick="triggerAlert()"><i class="bi bi-lightning-fill"></i> 测试告警</button>
+                    <button class="btn btn-success px-4" onclick="saveAlertConfig()"><i class="bi bi-save"></i> 保存配置</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ignored List (Collapsed) -->
+    <div class="collapsible-section mb-5">
+        <div class="collapsible-header" onclick="toggleCollapse('ignoredContent', 'ignoreIcon')">
+            <span><i class="bi bi-eye-slash-fill text-secondary me-2"></i>忽略的应用列表 <span class="badge bg-secondary ms-2" id="ignoreCount">0</span></span>
+            <i class="bi bi-chevron-down text-muted" id="ignoreIcon"></i>
+        </div>
+        <div class="collapsible-content" id="ignoredContent">
+            <button class="btn btn-sm btn-outline-secondary mb-3" onclick="addIgnore()"><i class="bi bi-plus-lg"></i> 添加 App ID</button>
+            <table class="table table-sm" id="ignoredTable"><tbody></tbody></table>
+        </div>
+    </div>
 </div>
 
-<div class="main-content">
-<div class="stats-grid">
-<div class="stats-card pulse-animation">
-<div class="stats-icon primary"><i class="bi bi-calendar-x"></i></div>
-<h6 class="text-muted mb-2">即将到期总数</h6>
-<h2 class="mb-0" id="totalExpiring">0</h2>
-<small class="text-muted">待处理凭据</small>
-</div>
-<div class="stats-card warning">
-<div class="stats-icon warning"><i class="bi bi-key"></i></div>
-<h6 class="text-muted mb-2">Client Secrets</h6>
-<h2 class="mb-0" id="totalSecrets">0</h2>
-<small class="text-muted">密钥数量</small>
-</div>
-<div class="stats-card">
-<div class="stats-icon success"><i class="bi bi-shield-check"></i></div>
-<h6 class="text-muted mb-2">Certificates</h6>
-<h2 class="mb-0" id="totalCerts">0</h2>
-<small class="text-muted">证书数量</small>
-</div>
-<div class="stats-card danger">
-<div class="stats-icon danger"><i class="bi bi-exclamation-triangle"></i></div>
-<h6 class="text-muted mb-2">7天内到期</h6>
-<h2 class="mb-0" id="criticalCount">0</h2>
-<small class="text-muted">紧急处理</small>
-</div>
-</div>
-
-<div class="filter-section">
-<h5 class="section-title mb-3"><i class="bi bi-funnel me-2"></i>筛选和配置</h5>
-<div class="filter-group">
-<div class="filter-item">
-<label class="filter-label"><i class="bi bi-calendar-range me-1"></i>天数</label>
-<div class="input-group">
-<input type="number" class="form-control" id="days" min="1" max="365" value="{{ default_days }}">
-<span class="input-group-text">天</span>
-</div>
-</div>
-<div class="filter-item">
-<div class="form-check form-switch">
-<input class="form-check-input" type="checkbox" id="showExpired" checked>
-<label class="form-check-label filter-label" for="showExpired" style="margin: 0;">
-<i class="bi bi-clock-history me-1"></i>已过期
-</label>
-</div>
-</div>
-<div class="filter-item">
-<div class="form-check form-switch">
-<input class="form-check-input" type="checkbox" id="showAll">
-<label class="form-check-label filter-label" for="showAll" style="margin: 0;">
-<i class="bi bi-eye-fill me-1"></i>显示全部凭据
-</label>
-</div>
-</div>
-<div class="filter-item">
-<label class="filter-label"><i class="bi bi-filter me-1"></i>类型</label>
-<select class="form-select" id="typeFilter">
-<option value="all">全部</option>
-<option value="Client Secret">Secret</option>
-<option value="Certificate">证书</option>
-</select>
-</div>
-<div class="filter-item">
-<label class="filter-label"><i class="bi bi-search me-1"></i>搜索</label>
-<div class="input-group">
-<input type="text" class="form-control" id="searchInput" placeholder="搜索...">
-<button class="btn btn-outline-secondary" type="button" id="btnClearSearch" title="清空搜索">
-<i class="bi bi-x"></i>
-</button>
-</div>
-</div>
-<div class="filter-item">
-<button class="btn refresh-btn" id="btnRefresh">
-<i class="bi bi-arrow-clockwise"></i>刷新
-</button>
-</div>
-</div>
-<div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2">
-<div class="info-text">
-<i class="bi bi-info-circle info-icon"></i>
-<span>当前缓存有效期：{{ cache_ttl }} 秒 | 下次自动刷新：<span id="autoRefreshCountdown">300</span> 秒</span>
-</div>
-<div class="action-buttons">
-<button class="btn btn-outline-primary btn-sm" id="btnExport">
-<i class="bi bi-download me-1"></i>导出 CSV
-</button>
-<button class="btn btn-outline-secondary btn-sm" id="btnCopy">
-<i class="bi bi-clipboard me-1"></i>复制结果
-</button>
-</div>
-</div>
-</div>
-
-<div class="table-container">
-<div class="table-responsive">
-<table class="table table-hover mb-0" id="dataTable">
-<thead class="table-light">
-<tr>
-<th><i class="bi bi-tag me-2"></i>类型</th>
-<th><i class="bi bi-app me-2"></i>应用名称</th>
-<th><i class="bi bi-hash me-2"></i>应用ID</th>
-<th><i class="bi bi-card-text me-2"></i>凭据名称</th>
-<th><i class="bi bi-calendar-event me-2"></i>到期时间 (UTC)</th>
-<th><i class="bi bi-clock me-2"></i>剩余天数</th>
-<th><i class="bi bi-activity me-2"></i>状态</th>
-</tr>
-</thead>
-<tbody id="tableBody">
-<tr>
-<td colspan="7" class="text-center py-5">
-<div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
-<span class="visually-hidden">加载中...</span>
-</div>
-<h5 class="mt-3">正在加载数据...</h5>
-<p class="text-muted">请稍候</p>
-</td>
-</tr>
-</tbody>
-</table>
-</div>
-<div class="table-footer">
-<div class="row align-items-center">
-<div class="col-md-6">
-<div id="statusMessage" class="text-muted">
-<i class="bi bi-hourglass-split me-2"></i>正在加载数据...
-</div>
-</div>
-<div class="col-md-6 text-end">
-<small class="text-muted">
-<i class="bi bi-info-circle me-1"></i>
-<span id="recordCount">共 0 条记录</span>
-</small>
-</div>
-</div>
-</div>
-</div>
-
-<!-- Collapsible Sections -->
-<div>
-<div class="collapsible-section">
-<div class="collapsible-header" id="alertConfigHeader">
-<h6 class="mb-0"><i class="bi bi-bell me-2"></i>钉钉告警通知设置</h6>
-<div class="collapsible-toggle collapsed" id="alertToggle">
-<i class="bi bi-chevron-down"></i>
-</div>
-</div>
-<div class="collapsible-content" id="alertConfigContent">
-<div class="row g-4">
-<div class="col-md-6">
-<label class="form-label fw-semibold">钉钉 Webhook URL</label>
-<input type="text" class="form-control" id="dingtalkWebhook" placeholder="https://oapi.dingtalk.com/robot/send?access_token=xxx">
-<div class="form-text">
-<i class="bi bi-info-circle me-1"></i>从钉钉机器人设置中复制完整 URL
-</div>
-</div>
-<div class="col-md-6">
-<label class="form-label fw-semibold">加签密钥（可选）</label>
-<input type="text" class="form-control" id="dingtalkSecret" placeholder="SECxxxxxxxxxxxxxx">
-<div class="form-text">
-<i class="bi bi-shield-lock me-1"></i>如果启用了"加签"，请填写密钥；否则留空
-</div>
-</div>
-<div class="col-md-4">
-<label class="form-label fw-semibold">告警周期（天）</label>
-<input type="number" class="form-control" id="alertDays" min="1" max="365" value="30">
-</div>
-<div class="col-md-4">
-<label class="form-label fw-semibold">检查间隔（小时）</label>
-<input type="number" class="form-control" id="alertInterval" min="1" max="168" value="24">
-<div class="form-text">多久检查一次凭据</div>
-</div>
-<div class="col-md-4">
-<label class="form-label fw-semibold">最小重发间隔（小时）</label>
-<input type="number" class="form-control" id="minAlertInterval" min="1" max="168" value="24">
-<div class="form-text">相同凭据至少间隔 N 小时才重复告警</div>
-</div>
-<div class="col-12">
-<div class="d-flex gap-2">
-<button class="btn btn-success flex-fill" id="btnSaveAlert">
-<i class="bi bi-save me-2"></i>保存配置
-</button>
-<button class="btn btn-outline-primary flex-fill" id="btnTriggerAlert">
-<i class="bi bi-bell-fill me-2"></i>立即告警测试
-</button>
-</div>
-</div>
-</div>
-</div>
-</div>
-
-<div class="collapsible-section">
-<div class="collapsible-header" id="ignoredAppsHeader">
-<h6 class="mb-0"><i class="bi bi-eye-slash me-2"></i>忽略的应用列表</h6>
-<div class="collapsible-toggle collapsed" id="ignoredToggle">
-<i class="bi bi-chevron-down"></i>
-</div>
-</div>
-<div class="collapsible-content" id="ignoredAppsContent">
-<div class="d-flex justify-content-between align-items-center mb-3">
-<div class="d-flex align-items-center gap-2">
-<h6 class="mb-0">忽略的应用（整个应用不告警）</h6>
-<span class="badge bg-secondary" id="ignoredCount">0</span>
-</div>
-<button class="btn btn-outline-secondary btn-sm" id="btnAddIgnore">
-<i class="bi bi-plus me-1"></i>添加应用ID
-</button>
-</div>
-<div class="table-responsive">
-<table class="table table-sm" id="ignoredTable">
-<thead class="table-light">
-<tr>
-<th><i class="bi bi-tag me-2"></i>类型</th>
-<th><i class="bi bi-app me-2"></i>应用名称</th>
-<th><i class="bi bi-hash me-2"></i>应用ID</th>
-<th><i class="bi bi-card-text me-2"></i>凭据名称</th>
-<th><i class="bi bi-calendar-event me-2"></i>到期时间</th>
-<th><i class="bi bi-clock me-2"></i>剩余天数</th>
-<th><i class="bi bi-trash me-2"></i>操作</th>
-</tr>
-</thead>
-<tbody></tbody>
-</table>
-</div>
-<div class="text-muted small mt-2">
-<i class="bi bi-info-circle me-1"></i>
-提示：忽略按 App ID 生效，将屏蔽该应用下所有凭据的告警
-</div>
-</div>
-</div>
-</div>
-</div>
-
-<div class="loading-overlay" id="loadingOverlay" style="display: none;">
-<div class="text-center">
-<div class="spinner mb-4"></div>
-<h5 class="text-white mb-2">正在获取数据...</h5>
-<p class="text-white-50 mb-0">请稍候，数据加载中</p>
-</div>
-</div>
-</div>
-
-<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1100;">
-<div id="notificationToast" class="toast hide" role="alert">
-<div class="toast-header">
-<i class="bi bi-info-circle me-2"></i>
-<strong class="me-auto">系统通知</strong>
-<button type="button" class="btn-close" data-bs-dismiss="toast"></button>
-</div>
-<div class="toast-body">
-<div class="d-flex align-items-center">
-<i class="bi bi-check-circle text-success me-2"></i>
-<span id="toastMessage">操作成功</span>
-</div>
-</div>
-</div>
+<!-- Toast -->
+<div class="position-fixed top-0 end-0 p-3" style="z-index: 9999">
+    <div id="liveToast" class="toast align-items-center text-white border-0" role="alert">
+        <div class="d-flex">
+            <div class="toast-body" id="toastMsg"></div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-let currentData = [];
-let refreshCountdown = {{ cache_ttl }};
-let toastInstance = null;
+let allData = [];
 
-function formatDaysLeft(iso) {
+function toggleCollapse(id, iconId) {
+    document.getElementById(id).classList.toggle('show');
+    const icon = document.getElementById(iconId);
+    icon.classList.toggle('bi-chevron-down');
+    icon.classList.toggle('bi-chevron-up');
+}
+
+function showToast(msg, type='success') {
+    const el = document.getElementById('liveToast');
+    el.className = `toast align-items-center text-white border-0 bg-${type}`;
+    document.getElementById('toastMsg').innerText = msg;
+    new bootstrap.Toast(el).show();
+}
+
+function toggleChannelConfig() {
+    const val = document.getElementById('activeChannel').value;
+    const ding = document.getElementById('dingtalkConfigGroup');
+    const feishu = document.getElementById('feishuConfigGroup');
+    const smtp = document.getElementById('smtpConfigGroup');
+
+    // Reset
+    ding.style.display = 'none';
+    feishu.style.display = 'none';
+    smtp.style.display = 'none';
+
+    // Show single selected
+    if (val === 'dingtalk') {
+        ding.style.display = 'block';
+    } else if (val === 'feishu') {
+        feishu.style.display = 'block';
+    } else if (val === 'email') {
+        smtp.style.display = 'block';
+    }
+}
+
+async function loadData(manual=false) {
+    const btn = document.getElementById('btnRefresh');
+    if(manual) { btn.disabled=true; btn.innerHTML='<span class="spinner-border spinner-border-sm"></span>'; }
     try {
-        const expiryDate = new Date(iso);
-        const now = new Date();
-        const diffMs = expiryDate - now;
-        const daysLeft = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-        if (daysLeft < 0) return { days: daysLeft, text: `已过期 ${Math.abs(daysLeft)} 天`, class: 'expiry-critical' };
-        if (daysLeft <= 7) return { days: daysLeft, text: `${daysLeft} 天`, class: 'expiry-critical' };
-        if (daysLeft <= 30) return { days: daysLeft, text: `${daysLeft} 天`, class: 'expiry-warning' };
-        return { days: daysLeft, text: `${daysLeft} 天`, class: 'expiry-safe' };
-    } catch (e) {
-        return { days: null, text: "N/A", class: '' };
-    }
-}
-
-function updateStats(data) {
-    const total = data.length;
-    const secrets = data.filter(item => item.type === 'Client Secret').length;
-    const certs = data.filter(item => item.type === 'Certificate').length;
-    const critical = data.filter(item => {
-        const daysLeft = formatDaysLeft(item.expires_on).days;
-        return daysLeft !== null && daysLeft <= 7;
-    }).length;
-    document.getElementById('totalExpiring').textContent = total;
-    document.getElementById('totalSecrets').textContent = secrets;
-    document.getElementById('totalCerts').textContent = certs;
-    document.getElementById('criticalCount').textContent = critical;
-    document.getElementById('recordCount').textContent = `共 ${total} 条记录`;
-}
-
-function getCredentialStyle(type) {
-    return {
-        class: type === 'Client Secret' ? 'credential-secret' : 'credential-cert',
-        icon: type === 'Client Secret' ? 'bi-key' : 'bi-file-certificate'
-    };
-}
-
-function getStatusBadge(days) {
-    if (days === null) return '<span class="badge bg-secondary">未知</span>';
-    if (days <= 7) return '<span class="badge bg-danger"><i class="bi bi-exclamation-triangle me-1"></i>紧急处理</span>';
-    if (days <= 30) return '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-circle me-1"></i>需要关注</span>';
-    return '<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>状态正常</span>';
-}
-
-function createTableRow(item, includeActions = false) {
-    const daysInfo = formatDaysLeft(item.expires_on);
-    const style = getCredentialStyle(item.type);
-    const row = document.createElement('tr');
-    row.innerHTML = `
-<td>
-<span class="credential-type ${style.class}">
-<i class="bi ${style.icon} me-1"></i>${item.type}
-</span>
-</td>
-<td><strong class="text-primary">${item.app_name || '未命名'}</strong></td>
-<td><code class="bg-light p-1 rounded small">${item.app_id || ''}</code></td>
-<td>${includeActions ? '' : '<i class="bi bi-tag me-1"></i>'}${item.cred_name || '未命名'}</td>
-<td>${includeActions ? '' : '<i class="bi bi-calendar3 me-1"></i>'}${item.expires_on || ''}</td>
-<td>
-<span class="expiry-badge ${daysInfo.class}">
-${includeActions ? '' : '<i class="bi bi-clock me-1"></i>'}${daysInfo.text}
-</span>
-</td>
-${includeActions ? '' : `<td>${getStatusBadge(daysInfo.days)}</td>`}
-${includeActions ? `<td>
-<button class="btn btn-sm btn-outline-danger remove-ignore" data-app-id="${item.app_id}">
-<i class="bi bi-trash"></i>
-</button>
-</td>` : ''}
-`;
-    return row;
-}
-
-function searchTableData(data, searchTerm) {
-    if (!searchTerm || searchTerm.trim() === '') return data;
-    const term = searchTerm.trim().toLowerCase();
-    return data.filter(item => {
-        const searchFields = [
-            item.type || '',
-            item.app_name || '',
-            item.app_id || '',
-            item.cred_name || '',
-            item.expires_on || ''
-        ];
-        return searchFields.some(field => field.toLowerCase().includes(term));
-    });
-}
-
-function renderTable(data) {
-    const tbody = document.getElementById('tableBody');
-    const typeFilter = document.getElementById('typeFilter').value;
-    const showExpired = document.getElementById('showExpired').checked;
-    const searchTerm = document.getElementById('searchInput').value.trim();
-    let filteredData = data;
-    filteredData = searchTableData(filteredData, searchTerm);
-    if (typeFilter !== 'all') {
-        filteredData = filteredData.filter(item => item.type === typeFilter);
-    }
-    if (!showExpired) {
-        filteredData = filteredData.filter(item => {
-            const daysLeft = formatDaysLeft(item.expires_on).days;
-            return daysLeft === null || daysLeft >= 0;
-        });
-    }
-    tbody.innerHTML = '';
-    if (filteredData.length === 0) {
-        tbody.innerHTML = `
-        <tr>
-            <td colspan="7" class="text-center py-5">
-                <div class="text-center">
-                    <i class="bi bi-check-circle" style="font-size: 48px; color: var(--success-color);"></i>
-                    <h5 class="mt-3">没有找到符合条件的凭据</h5>
-                    <p class="text-muted">尝试调整筛选条件或刷新数据</p>
-                </div>
-            </td>
-        </tr>
-        `;
-        return;
-    }
-    filteredData.forEach(item => {
-        tbody.appendChild(createTableRow(item));
-    });
-}
-
-async function loadData(showLoading = true) {
-    if (showLoading) {
-        document.getElementById('loadingOverlay').style.display = 'flex';
-    }
-    const days = document.getElementById('days').value;
-    const showWithoutPwd = document.getElementById('showWithoutPwd')?.checked ? 1 : 0;
-    const showAll = document.getElementById('showAll').checked ? 1 : 0;
-
-    try {
-        const response = await fetch(`/api/expiring?days=${encodeURIComponent(days)}&showWithoutPassword=${showWithoutPwd}&showAll=${showAll}`);
-        const result = await response.json();
-        if (result.error) {
-            showNotification('错误: ' + result.error, 'danger');
-            return;
-        }
-        currentData = result.items || [];
-        updateStats(currentData);
-        renderTable(currentData);
-        const now = new Date();
-        const timeStr = now.toLocaleString('zh-CN');
-        document.getElementById('statusMessage').innerHTML = `<i class="bi bi-check-circle text-success me-2"></i>
-        ${result.cached ? '已加载缓存数据' : '数据加载成功'} | 共 ${currentData.length} 条记录 | 更新时间: ${timeStr}`;
-        document.getElementById('lastUpdated').textContent = `最后更新: ${timeStr}`;
-        resetAutoRefresh();
-    } catch (error) {
-        showNotification('加载失败: ' + error.message, 'danger');
-    } finally {
-        if (showLoading) {
-            document.getElementById('loadingOverlay').style.display = 'none';
-        }
-    }
-}
-
-const notificationIcons = {
-    success: 'bi-check-circle text-success',
-    danger: 'bi-x-circle text-danger',
-    warning: 'bi-exclamation-triangle text-warning',
-    info: 'bi-info-circle text-info'
-};
-
-function showNotification(message, type = 'success') {
-    const toastEl = document.getElementById('notificationToast');
-    const toastMessage = document.getElementById('toastMessage');
-    const toastIcon = toastEl.querySelector('i');
-    toastMessage.textContent = message;
-    toastIcon.className = `bi me-2 ${notificationIcons[type] || notificationIcons.success}`;
-    if (!toastInstance) {
-        toastInstance = new bootstrap.Toast(toastEl);
-    }
-    toastInstance.show();
-}
-
-function downloadFile(content, filename, mimeType) {
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(url);
-}
-
-function exportToCSV() {
-    if (currentData.length === 0) {
-        showNotification('没有数据可导出', 'warning');
-        return;
-    }
-    const headers = ['类型', '应用名称', '应用ID', '凭据名称', '到期时间', '剩余天数'];
-    const csvRows = [headers.join(',')];
-    currentData.forEach(item => {
-        const daysInfo = formatDaysLeft(item.expires_on);
-        csvRows.push([
-            `"${item.type}"`,
-            `"${item.app_name || ''}"`,
-            `"${item.app_id || ''}"`,
-            `"${item.cred_name || ''}"`,
-            `"${item.expires_on || ''}"`,
-            daysInfo.days !== null ? daysInfo.days : 'N/A'
-        ].join(','));
-    });
-    const csvContent = '\uFEFF' + csvRows.join('\n');
-    const filename = `azure_credentials_${new Date().toISOString().split('T')[0]}.csv`;
-    downloadFile(csvContent, filename, 'text/csv;charset=utf-8;');
-    showNotification('CSV文件已导出', 'success');
-}
-
-function copyResults() {
-    if (currentData.length === 0) {
-        showNotification('没有数据可复制', 'warning');
-        return;
-    }
-    const text = currentData.map(item =>
-        `${item.type}: ${item.app_name} (${item.app_id}) - ${item.cred_name} 到期: ${item.expires_on}`
-    ).join('\n');
-    navigator.clipboard.writeText(text).then(() => {
-        showNotification('结果已复制到剪贴板', 'success');
-    }).catch(err => {
-        showNotification('复制失败: ' + err.message, 'danger');
-    });
-}
-
-function resetAutoRefresh() {
-    refreshCountdown = {{ cache_ttl }};
-    clearInterval(window.countdownInterval);
-    window.countdownInterval = setInterval(() => {
-        refreshCountdown--;
-        document.getElementById('autoRefreshCountdown').textContent = refreshCountdown;
-        if (refreshCountdown <= 0) {
-            loadData(false);
-            refreshCountdown = {{ cache_ttl }};
-        }
-    }, 1000);
-}
-
-// ========== 告警配置 ==========
-async function loadAlertConfig() {
-    try {
-        const configRes = await fetch('/api/alert/config');
-        const config = await configRes.json();
-        document.getElementById('dingtalkWebhook').value = config.dingtalk_webhook || '';
-        document.getElementById('dingtalkSecret').value = config.dingtalk_secret || '';
-        document.getElementById('alertDays').value = config.alert_threshold_days || 30;
-        document.getElementById('alertInterval').value = config.alert_check_interval_hours || 24;
-        document.getElementById('minAlertInterval').value = config.min_alert_interval_hours || 24;
-        const ignoredRes = await fetch('/api/alert/ignored');
-        const ignoredItems = await ignoredRes.json();
-        renderIgnoredTable(ignoredItems);
-    } catch (err) {
-        showNotification('加载告警配置失败: ' + err.message, 'danger');
-    }
-}
-
-async function apiRequest(url, options = {}) {
-    try {
-        const res = await fetch(url, {
-            headers: {'Content-Type': 'application/json'},
-            ...options
-        });
+        const days = document.getElementById('days').value;
+        const showAll = document.getElementById('showAll').checked;
+        const res = await fetch(`/api/expiring?days=${days}&showAll=${showAll}`);
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || '请求失败');
-        return data;
-    } catch (err) {
-        throw err;
-    }
+        allData = data.items || [];
+        renderTable();
+        updateStats();
+        document.getElementById('lastUpdated').innerText = `最后更新: ${new Date().toLocaleTimeString()} ` + (data.cached?'(缓存)':'');
+    } catch(e) { showToast(e.message, 'danger'); }
+    if(manual) { btn.disabled=false; btn.innerHTML='<i class="bi bi-arrow-clockwise me-1"></i>刷新'; }
+}
+
+function renderTable() {
+    const term = document.getElementById('searchInput').value.toLowerCase();
+    const showExpired = document.getElementById('showExpired').checked;
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = '';
+    
+    const filtered = allData.filter(i => {
+        if(!showExpired && new Date(i.expires_on) < new Date()) return false;
+        if(term && !JSON.stringify(i).toLowerCase().includes(term)) return false;
+        return true;
+    });
+
+    if(!filtered.length) { tbody.innerHTML='<tr><td colspan="6" class="text-center py-4 text-muted">无数据</td></tr>'; return; }
+
+    filtered.forEach(i => {
+        const diff = Math.ceil((new Date(i.expires_on) - new Date())/(86400000));
+        let badge = 'expiry-safe';
+        if(diff < 0) badge = 'expiry-critical';
+        else if(diff <= 30) badge = 'expiry-warning';
+        
+        tbody.innerHTML += `<tr>
+            <td class="ps-4"><span class="credential-type ${i.type==='Client Secret'?'credential-secret':'credential-cert'}">${i.type==='Client Secret'?'Secret':'Cert'}</span></td>
+            <td class="fw-bold text-primary">${i.app_name}</td>
+            <td><code>${i.app_id}</code></td>
+            <td>${i.cred_name}</td>
+            <td>${i.expires_on}</td>
+            <td><span class="expiry-badge ${badge}">${diff} 天</span></td>
+        </tr>`;
+    });
+    document.getElementById('tableFooter').innerText = `共 ${filtered.length} 条记录`;
+}
+
+function updateStats() {
+    document.getElementById('statTotal').innerText = allData.length;
+    document.getElementById('statSecrets').innerText = allData.filter(x=>x.type==='Client Secret').length;
+    document.getElementById('statCerts').innerText = allData.filter(x=>x.type==='Certificate').length;
+    document.getElementById('statCritical').innerText = allData.filter(x => {
+        const d = Math.ceil((new Date(x.expires_on) - new Date())/(86400000));
+        return d >= 0 && d <= 7;
+    }).length;
+}
+
+async function loadConfig() {
+    const res = await fetch('/api/alert/config');
+    const cfg = await res.json();
+    document.getElementById('activeChannel').value = cfg.active_channel || 'dingtalk';
+    
+    document.getElementById('dingtalkWebhook').value = cfg.dingtalk_webhook||'';
+    document.getElementById('dingtalkSecret').value = cfg.dingtalk_secret||'';
+    document.getElementById('feishuWebhook').value = cfg.feishu_webhook||'';
+    document.getElementById('feishuSecret').value = cfg.feishu_secret||'';
+    
+    // SMTP Load
+    document.getElementById('smtpHost').value = cfg.smtp_host || '';
+    document.getElementById('smtpPort').value = cfg.smtp_port || '587';
+    document.getElementById('smtpUser').value = cfg.smtp_user || '';
+    document.getElementById('smtpPass').value = cfg.smtp_password || '';
+    document.getElementById('smtpTo').value = cfg.smtp_to_email || '';
+
+    document.getElementById('alertDays').value = cfg.alert_threshold_days||30;
+    document.getElementById('alertInterval').value = cfg.alert_check_interval_hours||24;
+    document.getElementById('minAlertInterval').value = cfg.min_alert_interval_hours||24;
+    
+    toggleChannelConfig(); // Refresh UI visibility based on loaded config
+    loadIgnored();
 }
 
 async function saveAlertConfig() {
-    const config = {
-        dingtalk_webhook: document.getElementById('dingtalkWebhook').value.trim(),
-        dingtalk_secret: document.getElementById('dingtalkSecret').value.trim(),
-        alert_threshold_days: parseInt(document.getElementById('alertDays').value) || 30,
-        alert_check_interval_hours: parseInt(document.getElementById('alertInterval').value) || 24,
-        min_alert_interval_hours: parseInt(document.getElementById('minAlertInterval').value) || 24
-    };
-    try {
-        await apiRequest('/api/alert/config', { method: 'POST', body: JSON.stringify(config) });
-        showNotification('告警配置保存成功', 'success');
-    } catch (err) {
-        showNotification('保存失败: ' + err.message, 'danger');
-    }
-}
+    const body = {
+        active_channel: document.getElementById('activeChannel').value,
+        dingtalk_webhook: document.getElementById('dingtalkWebhook').value,
+        dingtalk_secret: document.getElementById('dingtalkSecret').value,
+        feishu_webhook: document.getElementById('feishuWebhook').value,
+        feishu_secret: document.getElementById('feishuSecret').value,
+        
+        // SMTP Save
+        smtp_host: document.getElementById('smtpHost').value,
+        smtp_port: document.getElementById('smtpPort').value,
+        smtp_user: document.getElementById('smtpUser').value,
+        smtp_password: document.getElementById('smtpPass').value,
+        smtp_to_email: document.getElementById('smtpTo').value,
 
-const alertStatusMap = {
-    success: { icon: '✅', type: 'success' },
-    no_alert: { icon: 'ℹ️', type: 'info' },
-    skipped: { icon: '⏭️', type: 'warning' }
-};
+        alert_threshold_days: document.getElementById('alertDays').value,
+        alert_check_interval_hours: document.getElementById('alertInterval').value,
+        min_alert_interval_hours: document.getElementById('minAlertInterval').value
+    };
+    await fetch('/api/alert/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    showToast('配置已保存');
+}
 
 async function triggerAlert() {
-    try {
-        const res = await fetch('/api/alert/trigger', { method: 'POST' });
-        const data = await res.json();
-        if (res.ok && alertStatusMap[data.status]) {
-            const { icon, type } = alertStatusMap[data.status];
-            showNotification(`${icon} ${data.message}`, type);
-        } else {
-            throw new Error(data.message || '触发失败');
-        }
-    } catch (err) {
-        showNotification('❌ ' + err.message, 'danger');
-    }
+    showToast('正在触发...', 'primary');
+    const res = await fetch('/api/alert/trigger', {method:'POST'});
+    const d = await res.json();
+    showToast(d.message, d.status==='success'?'success':'danger');
 }
 
-async function removeIgnoredApp(app_id) {
-    try {
-        await apiRequest('/api/alert/ignored', { method: 'DELETE', body: JSON.stringify({app_id}) });
-        loadAlertConfig();
-        showNotification('已移除忽略应用', 'success');
-    } catch (err) {
-        showNotification('移除失败: ' + err.message, 'danger');
-    }
+async function loadIgnored() {
+    const res = await fetch('/api/alert/ignored');
+    const ids = await res.json();
+    document.getElementById('ignoreCount').innerText = ids.length;
+    document.querySelector('#ignoredTable tbody').innerHTML = ids.map(id => 
+        `<tr><td><code>${id}</code></td><td class="text-end"><button class="btn btn-sm text-danger" onclick="delIgnore('${id}')"><i class="bi bi-trash"></i></button></td></tr>`
+    ).join('');
 }
 
-function renderIgnoredTable(ignoredItems) {
-    const tbody = document.querySelector('#ignoredTable tbody');
-    tbody.innerHTML = '';
-    if (!Array.isArray(ignoredItems) || ignoredItems.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">暂无忽略应用</td></tr>';
-        document.getElementById('ignoredCount').textContent = '0';
-        return;
-    }
-    ignoredItems.forEach(item => {
-        if (!item.expires_on) {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-            <td colspan="6">App ID: <code class="bg-light p-1 rounded">${item.app_id}</code>（凭据数据加载失败）</td>
-            <td>
-                <button class="btn btn-sm btn-outline-danger remove-ignore" data-app-id="${item.app_id}">
-                    <i class="bi bi-trash"></i>
-                </button>
-            </td>
-            `;
-            tbody.appendChild(row);
-            return;
-        }
-        tbody.appendChild(createTableRow(item, true));
-    });
-    document.getElementById('ignoredCount').textContent = ignoredItems.length;
-    tbody.querySelectorAll('.remove-ignore').forEach(btn => {
-        btn.addEventListener('click', () => removeIgnoredApp(btn.dataset.appId));
-    });
+async function addIgnore() {
+    const id = prompt("App ID:");
+    if(id) { await fetch('/api/alert/ignored', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({app_id:id})}); loadIgnored(); }
+}
+async function delIgnore(id) {
+    await fetch('/api/alert/ignored', {method:'DELETE', headers:{'Content-Type':'application/json'}, body:JSON.stringify({app_id:id})}); loadIgnored();
 }
 
-const UUID_REGEX = /^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$/;
-
-async function addIgnoredApp() {
-    const app_id = prompt('请输入要忽略的 Azure 应用ID (App ID):');
-    if (!app_id) return;
-    const trimmed = app_id.trim();
-    if (!UUID_REGEX.test(trimmed)) {
-        showNotification('应用ID格式无效（应为标准 UUID）', 'warning');
-        return;
-    }
-    try {
-        await apiRequest('/api/alert/ignored', { method: 'POST', body: JSON.stringify({app_id: trimmed}) });
-        loadAlertConfig();
-        showNotification('已添加忽略应用', 'success');
-    } catch (err) {
-        showNotification('添加失败: ' + err.message, 'danger');
-    }
+function exportToCSV() {
+    const csv = "Type,AppName,AppID,Credential,ExpiresOn\n" + allData.map(i => `${i.type},${i.app_name},${i.app_id},${i.cred_name},${i.expires_on}`).join('\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'})); a.download='azure_monitor.csv'; a.click();
 }
-
-const eventHandlers = {
-    'btnRefresh': () => loadData(true),
-    'btnExport': exportToCSV,
-    'btnCopy': copyResults,
-    'btnSaveAlert': saveAlertConfig,
-    'btnTriggerAlert': triggerAlert,
-    'btnAddIgnore': addIgnoredApp,
-    'btnClearSearch': () => {
-        document.getElementById('searchInput').value = '';
-        renderTable(currentData);
-    },
-    'typeFilter': () => renderTable(currentData),
-    'showExpired': () => renderTable(currentData),
-    'showAll': () => loadData(true),
-    'searchInput': () => renderTable(currentData)
-    // 删除了 'days': () => loadData(true)
-};
 
 document.addEventListener('DOMContentLoaded', () => {
-    loadData();
-    loadAlertConfig();
-    
-    // 批量绑定
-    Object.entries(eventHandlers).forEach(([id, handler]) => {
-        const element = document.getElementById(id);
-        if (element) {
-            const eventType = id.startsWith('btn') ? 'click' :
-                id === 'searchInput' ? 'input' : 'change';
-            element.addEventListener(eventType, handler);
-        }
-    });
-
-    // 专门为 Days 输入框添加 回车键 监听
-    const daysInput = document.getElementById('days');
-    if (daysInput) {
-        daysInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                loadData(true);
-                daysInput.blur(); // 收起键盘/移除焦点
-            }
-        });
-    }
-
-    document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) loadData(false);
-    });
-    function initCollapsible(headerId, contentId, toggleId) {
-        const header = document.getElementById(headerId);
-        const content = document.getElementById(contentId);
-        const toggle = document.getElementById(toggleId);
-        header.addEventListener('click', () => {
-            const isExpanded = content.classList.toggle('show');
-            toggle.classList.toggle('collapsed', !isExpanded);
-            toggle.classList.toggle('expanded', isExpanded);
-            toggle.innerHTML = isExpanded
-                ? '<i class="bi bi-chevron-up"></i>'
-                : '<i class="bi bi-chevron-down"></i>';
-        });
-    }
-    initCollapsible('alertConfigHeader', 'alertConfigContent', 'alertToggle');
-    initCollapsible('ignoredAppsHeader', 'ignoredAppsContent', 'ignoredToggle');
-});
-
-window.addEventListener('beforeunload', () => {
-    if (window.countdownInterval) clearInterval(window.countdownInterval);
+    loadData(); loadConfig();
+    document.getElementById('searchInput').addEventListener('input', renderTable);
+    document.getElementById('showExpired').addEventListener('change', renderTable);
+    document.getElementById('showAll').addEventListener('change', renderTable);
+    document.getElementById('btnRefresh').addEventListener('click', () => loadData(true));
+    document.getElementById('days').addEventListener('keypress', e => e.key==='Enter' && loadData(true));
 });
 </script>
 </body>
