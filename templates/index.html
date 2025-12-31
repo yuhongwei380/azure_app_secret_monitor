@@ -655,52 +655,81 @@ to { box-shadow: 0 0 20px rgba(0, 120, 212, 0.6); }
 <div>
 <div class="collapsible-section">
 <div class="collapsible-header" id="alertConfigHeader">
-<h6 class="mb-0"><i class="bi bi-bell me-2"></i>钉钉告警通知设置</h6>
+<h6 class="mb-0"><i class="bi bi-bell me-2"></i>告警通知配置 (DingTalk & Feishu)</h6>
 <div class="collapsible-toggle collapsed" id="alertToggle">
 <i class="bi bi-chevron-down"></i>
 </div>
 </div>
 <div class="collapsible-content" id="alertConfigContent">
-<div class="row g-4">
-<div class="col-md-6">
-<label class="form-label fw-semibold">钉钉 Webhook URL</label>
-<input type="text" class="form-control" id="dingtalkWebhook" placeholder="https://oapi.dingtalk.com/robot/send?access_token=xxx">
-<div class="form-text">
-<i class="bi bi-info-circle me-1"></i>从钉钉机器人设置中复制完整 URL
-</div>
-</div>
-<div class="col-md-6">
-<label class="form-label fw-semibold">加签密钥（可选）</label>
-<input type="text" class="form-control" id="dingtalkSecret" placeholder="SECxxxxxxxxxxxxxx">
-<div class="form-text">
-<i class="bi bi-shield-lock me-1"></i>如果启用了"加签"，请填写密钥；否则留空
-</div>
-</div>
-<div class="col-md-4">
-<label class="form-label fw-semibold">告警周期（天）</label>
-<input type="number" class="form-control" id="alertDays" min="1" max="365" value="30">
-</div>
-<div class="col-md-4">
-<label class="form-label fw-semibold">检查间隔（小时）</label>
-<input type="number" class="form-control" id="alertInterval" min="1" max="168" value="24">
-<div class="form-text">多久检查一次凭据</div>
-</div>
-<div class="col-md-4">
-<label class="form-label fw-semibold">最小重发间隔（小时）</label>
-<input type="number" class="form-control" id="minAlertInterval" min="1" max="168" value="24">
-<div class="form-text">相同凭据至少间隔 N 小时才重复告警</div>
-</div>
-<div class="col-12">
-<div class="d-flex gap-2">
-<button class="btn btn-success flex-fill" id="btnSaveAlert">
-<i class="bi bi-save me-2"></i>保存配置
-</button>
-<button class="btn btn-outline-primary flex-fill" id="btnTriggerAlert">
-<i class="bi bi-bell-fill me-2"></i>立即告警测试
-</button>
-</div>
-</div>
-</div>
+    <div class="row g-4">
+        <!-- 钉钉配置 -->
+        <div class="col-12 border-bottom pb-3">
+            <h6 class="text-primary mb-3"><i class="bi bi-robot me-2"></i>钉钉 (DingTalk)</h6>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Webhook URL</label>
+                    <input type="text" class="form-control" id="dingtalkWebhook" placeholder="https://oapi.dingtalk.com/robot/send?access_token=...">
+                    <div class="form-text">钉钉群组机器人的 Webhook 地址</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">加签密钥 (Secret)</label>
+                    <input type="text" class="form-control" id="dingtalkSecret" placeholder="SEC...">
+                    <div class="form-text">如果开启了加签，请填写 SEC 开头的密钥</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 飞书配置 -->
+        <div class="col-12 border-bottom pb-3">
+            <h6 class="text-success mb-3"><i class="bi bi-chat-dots me-2"></i>飞书 (Feishu/Lark)</h6>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Webhook URL</label>
+                    <input type="text" class="form-control" id="feishuWebhook" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/...">
+                    <div class="form-text">飞书群组自定义机器人的 Webhook 地址</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">签名校验 (Secret)</label>
+                    <input type="text" class="form-control" id="feishuSecret" placeholder="例如: xxxxx">
+                    <div class="form-text">如果开启了签名校验，请填写 Secret (可选)</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 通用配置 -->
+        <div class="col-12">
+            <h6 class="text-secondary mb-3"><i class="bi bi-sliders me-2"></i>通用策略</h6>
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">告警周期（天）</label>
+                    <input type="number" class="form-control" id="alertDays" min="1" max="365" value="30">
+                    <div class="form-text">凭据剩余时间小于该值时触发告警</div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">检查间隔（小时）</label>
+                    <input type="number" class="form-control" id="alertInterval" min="1" max="168" value="24">
+                    <div class="form-text">后台线程检查的频率</div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">最小重发间隔（小时）</label>
+                    <input type="number" class="form-control" id="minAlertInterval" min="1" max="168" value="24">
+                    <div class="form-text">同一凭据重复告警的静默时间</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 按钮 -->
+        <div class="col-12 mt-4">
+            <div class="d-flex gap-2">
+                <button class="btn btn-success flex-fill" id="btnSaveAlert">
+                    <i class="bi bi-save me-2"></i>保存配置
+                </button>
+                <button class="btn btn-outline-primary flex-fill" id="btnTriggerAlert">
+                    <i class="bi bi-bell-fill me-2"></i>立即告警测试
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 </div>
 
@@ -1020,11 +1049,20 @@ async function loadAlertConfig() {
     try {
         const configRes = await fetch('/api/alert/config');
         const config = await configRes.json();
+        
+        // 钉钉
         document.getElementById('dingtalkWebhook').value = config.dingtalk_webhook || '';
         document.getElementById('dingtalkSecret').value = config.dingtalk_secret || '';
+        
+        // 飞书
+        document.getElementById('feishuWebhook').value = config.feishu_webhook || '';
+        document.getElementById('feishuSecret').value = config.feishu_secret || '';
+
+        // 通用
         document.getElementById('alertDays').value = config.alert_threshold_days || 30;
         document.getElementById('alertInterval').value = config.alert_check_interval_hours || 24;
         document.getElementById('minAlertInterval').value = config.min_alert_interval_hours || 24;
+        
         const ignoredRes = await fetch('/api/alert/ignored');
         const ignoredItems = await ignoredRes.json();
         renderIgnoredTable(ignoredItems);
@@ -1051,6 +1089,8 @@ async function saveAlertConfig() {
     const config = {
         dingtalk_webhook: document.getElementById('dingtalkWebhook').value.trim(),
         dingtalk_secret: document.getElementById('dingtalkSecret').value.trim(),
+        feishu_webhook: document.getElementById('feishuWebhook').value.trim(),
+        feishu_secret: document.getElementById('feishuSecret').value.trim(),
         alert_threshold_days: parseInt(document.getElementById('alertDays').value) || 30,
         alert_check_interval_hours: parseInt(document.getElementById('alertInterval').value) || 24,
         min_alert_interval_hours: parseInt(document.getElementById('minAlertInterval').value) || 24
@@ -1077,7 +1117,12 @@ async function triggerAlert() {
             const { icon, type } = alertStatusMap[data.status];
             showNotification(`${icon} ${data.message}`, type);
         } else {
-            throw new Error(data.message || '触发失败');
+            // 处理后端返回的自定义状态（如 success 但有部分失败）
+            if (data.status === 'failed') {
+                showNotification(`❌ ${data.message}`, 'danger');
+            } else {
+                showNotification(`${data.status}: ${data.message}`, 'info');
+            }
         }
     } catch (err) {
         showNotification('❌ ' + err.message, 'danger');
@@ -1158,14 +1203,12 @@ const eventHandlers = {
     'showExpired': () => renderTable(currentData),
     'showAll': () => loadData(true),
     'searchInput': () => renderTable(currentData)
-    // 删除了 'days': () => loadData(true)
 };
 
 document.addEventListener('DOMContentLoaded', () => {
     loadData();
     loadAlertConfig();
     
-    // 批量绑定
     Object.entries(eventHandlers).forEach(([id, handler]) => {
         const element = document.getElementById(id);
         if (element) {
@@ -1175,13 +1218,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 专门为 Days 输入框添加 回车键 监听
+    // 为天数输入框添加回车事件，不绑定 onchange
     const daysInput = document.getElementById('days');
     if (daysInput) {
         daysInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 loadData(true);
-                daysInput.blur(); // 收起键盘/移除焦点
+                daysInput.blur();
             }
         });
     }
