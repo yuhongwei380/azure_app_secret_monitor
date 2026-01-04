@@ -43,11 +43,15 @@ pip3 install python-dotenv
 pip3 install flask
 pip install -r requirements.txt
 ```
-3.4 python 运行
+3.4 python 本地运行
 
 ```
 python3 azure_app_monitor.py
 ```
 
-
-
+3.5 Docker运行
+<p>需要环境：docker 和docker-compose</p>
+需要修改compose.yml中的client ID和Tenant ID
+````
+docker-compose up -d
+```
