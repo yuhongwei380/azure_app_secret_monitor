@@ -1,8 +1,8 @@
 
 services:
-  azure-app-monitor:
-    image: azure-app-monitor:latest
-    container_name: azure-app-monitor
+  azure-app-secret-monitor:
+    image: azure-app-secret-monitor:latest
+    container_name: azure-app-secret-monitor
     ports:
       - "8000:8000"
     volumes:
