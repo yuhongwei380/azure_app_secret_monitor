@@ -55,15 +55,36 @@ app.secret_key = SECRET_KEY
 _MSAL_APP = None
 
 # === 辅助函数 ===
+def parse_azure_timestamp(date_str):
+    """
+    鲁棒地解析 Azure 返回的时间字符串。
+    Azure 可能返回 .02, .123 等不固定长度的毫秒，导致 fromisoformat 报错。
+    这里直接去掉毫秒部分，只保留秒级精度，并确保时区为 UTC。
+    """
+    if not date_str:
+        return None
+    try:
+        # 标准化 Z 为 +00:00
+        clean_str = date_str.replace("Z", "+00:00")
+        # 如果包含小数点（毫秒），直接截断去掉
+        if "." in clean_str:
+            # split('.')[0] 拿到 YYYY-MM-DDTHH:MM:SS
+            # 手动补上 +00:00，因为 Azure 的 Z 时间一定是 UTC
+            clean_str = clean_str.split(".")[0] + "+00:00"
+        return datetime.fromisoformat(clean_str)
+    except Exception as e:
+        print(f"Time parse error: {date_str} -> {e}")
+        return None
+
 def format_expiry_date(date_value):
     if not date_value: return None
     try:
         if isinstance(date_value, datetime): return date_value.strftime('%Y-%m-%d')
         elif isinstance(date_value, str):
-            date_str = date_value.replace('Z', '+00:00')
-            if '.' in date_str: date_str = date_str.split('.')[0] + '+00:00'
-            try: return datetime.fromisoformat(date_str).strftime('%Y-%m-%d')
-            except: return date_value[:10]
+            # 复用上面的解析逻辑，然后再格式化
+            dt = parse_azure_timestamp(date_value)
+            if dt: return dt.strftime('%Y-%m-%d')
+            return date_value[:10]
         return str(date_value)
     except: return str(date_value)
 
@@ -212,13 +233,19 @@ def fetch_expiring(days, no_pwd, show_all):
             
             for c in p_creds:
                 if not c.get("endDateTime"): continue
-                dt = datetime.fromisoformat(c["endDateTime"].replace("Z", "+00:00"))
+                # 使用新的解析函数
+                dt = parse_azure_timestamp(c["endDateTime"])
+                if not dt: continue # 如果解析失败则跳过
+
                 if show_all or (cutoff and dt <= cutoff):
                     items.append({"type": "Client Secret", "app_name": app.get("displayName"), "app_id": app.get("appId"), "cred_name": c.get("displayName"), "expires_on": format_expiry_date(dt)})
             
             for k in k_creds:
                 if k.get("usage") != "Verify" or not k.get("endDateTime"): continue
-                dt = datetime.fromisoformat(k["endDateTime"].replace("Z", "+00:00"))
+                # 使用新的解析函数
+                dt = parse_azure_timestamp(k["endDateTime"])
+                if not dt: continue
+
                 if show_all or (cutoff and dt <= cutoff):
                     items.append({"type": "Certificate", "app_name": app.get("displayName"), "app_id": app.get("appId"), "cred_name": k.get("displayName"), "expires_on": format_expiry_date(dt)})
         
@@ -245,7 +272,11 @@ def check_alert(force=False):
             key = f"{i['app_id']}|{i['cred_name']}"
             last_ts = last.get(key)
             if not force and last_ts:
-                if (now - datetime.fromisoformat(last_ts)).total_seconds() < min_int*3600: continue
+                # 解析上次告警时间时也要小心，虽然这里是我们自己存的
+                try:
+                    last_dt = datetime.fromisoformat(last_ts)
+                    if (now - last_dt).total_seconds() < min_int*3600: continue
+                except: pass
             alerts.append(i)
             
         if not alerts: return {"status": "no_alert", "message": "No new alerts"}
@@ -255,7 +286,7 @@ def check_alert(force=False):
         
         logs = []
         
-        # === Check Channels (UPDATED: Removed combined options) ===
+        # === Check Channels ===
         
         # DingTalk Only
         if channel == "dingtalk":
@@ -333,7 +364,44 @@ def set_cfg():
 def trigger(): return jsonify(check_alert(True))
 
 @app.get("/api/alert/ignored")
-def get_ign(): return jsonify(load_alert_config().get("ignored_app_ids", []))
+def get_ign():
+    ignored_ids = load_alert_config().get("ignored_app_ids", [])
+    if not ignored_ids: return jsonify([])
+    
+    try:
+        cache_key = (365, True, True)
+        cached_data, _ = CACHE.get(cache_key)
+        
+        if cached_data:
+            all_data = cached_data
+        else:
+            all_data = fetch_expiring(days=365, no_pwd=True, show_all=True)
+            CACHE.set(cache_key, all_data)
+    except Exception as e:
+        print(f"Error fetching details for ignored list: {e}")
+        all_data = []
+
+    result = []
+    found_ids = set()
+
+    for item in all_data:
+        if item['app_id'] in ignored_ids:
+            found_ids.add(item['app_id'])
+            result.append(item)
+    
+    for iid in ignored_ids:
+        if iid not in found_ids:
+            result.append({
+                "app_id": iid,
+                "app_name": "(未找到或已删除)",
+                "cred_name": "-",
+                "type": "未知",
+                "expires_on": "-",
+                "is_orphan": True 
+            })
+
+    result.sort(key=lambda x: x['app_id'])
+    return jsonify(result)
 
 @app.post("/api/alert/ignored")
 def add_ign():
