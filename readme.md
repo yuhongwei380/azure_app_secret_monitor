@@ -51,7 +51,10 @@ python3 azure_app_monitor.py
 
 3.5 Docker运行
 <p>需要环境：docker 和docker-compose</p>
-需要修改compose.yml中的client ID和Tenant ID
-````
+<p>需要修改compose.yml中的client ID和Tenant ID</p>
+
+```
+touch alert_config.json
+touch last_alerted.json
 docker-compose up -d
 ```
