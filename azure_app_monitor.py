@@ -16,7 +16,8 @@ from cryptography.hazmat.primitives import hashes
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, session, redirect, url_for
+from functools import wraps
 
 # 加载 .env
 load_dotenv()
@@ -42,6 +43,7 @@ DEFAULT_SHOW_APPS_WITHOUT_PASSWORD = os.getenv("SHOW_APPS_WITHOUT_PASSWORD", "1"
 CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "300"))
 PORT = int(os.getenv("PORT", "8000"))
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")  # 管理员密码，建议通过环境变量设置
 
 ALERT_CONFIG_FILE = BASE_DIR / "alert_config.json"
 LAST_ALERTED_FILE = BASE_DIR / "last_alerted.json"
@@ -319,9 +321,43 @@ def check_alert(force=False):
         
     except Exception as e: return {"status": "error", "message": str(e)}
 
+# === 管理员认证装饰器 ===
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('admin_logged_in'):
+            return jsonify({"status": "error", "message": "需要管理员权限"}), 403
+        return f(*args, **kwargs)
+    return decorated_function
+
 # === Routes ===
 @app.get("/")
 def index(): return render_template("index.html", default_days=DEFAULT_EXPIRY_THRESHOLD_DAYS, show_without_password=DEFAULT_SHOW_APPS_WITHOUT_PASSWORD, cache_ttl=CACHE_TTL_SECONDS)
+
+@app.get("/admin")
+def admin_login_page():
+    if session.get('admin_logged_in'):
+        return redirect(url_for('admin_dashboard'))
+    return render_template("admin_login.html")
+
+@app.post("/admin/login")
+def admin_login():
+    password = request.json.get("password", "")
+    if password == ADMIN_PASSWORD:
+        session['admin_logged_in'] = True
+        return jsonify({"status": "ok"})
+    return jsonify({"status": "error", "message": "密码错误"}), 401
+
+@app.post("/admin/logout")
+def admin_logout():
+    session.pop('admin_logged_in', None)
+    return jsonify({"status": "ok"})
+
+@app.get("/admin/dashboard")
+def admin_dashboard():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin_login_page'))
+    return render_template("admin.html")
 
 @app.get("/api/expiring")
 def api_get():
@@ -339,6 +375,7 @@ def api_get():
 def get_cfg(): return jsonify(load_alert_config())
 
 @app.post("/api/alert/config")
+@admin_required
 def set_cfg():
     c = load_alert_config()
     d = request.json
@@ -361,6 +398,7 @@ def set_cfg():
     return jsonify({"status": "ok"})
 
 @app.post("/api/alert/trigger")
+@admin_required
 def trigger(): return jsonify(check_alert(True))
 
 @app.get("/api/alert/ignored")
@@ -404,6 +442,7 @@ def get_ign():
     return jsonify(result)
 
 @app.post("/api/alert/ignored")
+@admin_required
 def add_ign():
     c = load_alert_config()
     aid = request.json.get("app_id", "").strip()
@@ -413,6 +452,7 @@ def add_ign():
     return jsonify({"status": "ok"})
 
 @app.delete("/api/alert/ignored")
+@admin_required
 def del_ign():
     c = load_alert_config()
     aid = request.json.get("app_id", "").strip()

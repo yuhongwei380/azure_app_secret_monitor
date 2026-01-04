@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理页面 - Azure 应用凭据监控</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+<style>
+:root {
+    --primary-color: #0078d4;
+    --primary-dark: #005a9e;
+    --warning-color: #ff9800;
+    --danger-color: #f44336;
+    --success-color: #4caf50;
+    --light-bg: #f8f9fa;
+    --card-bg: #ffffff;
+    --text-primary: #2c3e50;
+    --border-color: #e9ecef;
+    --shadow-medium: 0 10px 25px rgba(0,0,0,0.1);
+    --shadow-heavy: 0 20px 40px rgba(0,0,0,0.15);
+    --header-gradient: linear-gradient(135deg, #0078d4, #005a9e);
+}
+body {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    font-family: 'Inter', sans-serif;
+    color: var(--text-primary);
+    padding: 20px;
+}
+.main-container {
+    background: rgba(255, 255, 255, 0.98);
+    border-radius: 20px;
+    box-shadow: var(--shadow-heavy);
+    margin: 0 auto;
+    max-width: 1400px;
+    overflow: hidden;
+    backdrop-filter: blur(10px);
+}
+.header-section {
+    background: var(--header-gradient);
+    color: white;
+    padding: 30px;
+    border-radius: 20px;
+    margin: 20px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: var(--shadow-medium);
+}
+.header-section > * {
+    position: relative;
+    z-index: 1;
+}
+.header-section::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="rgba(255,255,255,0.1)"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
+    opacity: 0.1;
+    pointer-events: none;
+    z-index: 0;
+}
+.app-logo {
+    width: 60px; height: 60px;
+    background: white; border-radius: 15px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+.header-title { font-weight: 600; font-size: 1.5rem; margin-bottom: 0; display: flex; align-items: center; gap: 10px; }
+.collapsible-section { margin: 20px; border-radius: 16px; overflow: hidden; background: white; border: 1px solid var(--border-color); }
+.collapsible-header { padding: 20px; cursor: pointer; background: white; display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
+.collapsible-header:hover { background: #f8f9fa; }
+.collapsible-content { display: block; padding: 24px; border-top: 1px solid var(--border-color); background: #fcfcfc; }
+</style>
+</head>
+<body>
+<div class="main-container">
+    <!-- Header -->
+    <div class="header-section">
+        <div class="d-flex align-items-center gap-3">
+            <div class="app-logo">
+                <i class="bi bi-shield-lock text-primary" style="font-size: 28px;"></i>
+            </div>
+            <div>
+                <h1 class="header-title"><i class="bi bi-gear"></i> 管理页面</h1>
+                <p class="mb-0 opacity-75 small">配置通知和忽略的应用</p>
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="/" class="btn btn-light btn-sm" style="text-decoration: none; position: relative; z-index: 10;">
+                <i class="bi bi-house me-1"></i>返回首页
+            </a>
+            <button type="button" class="btn btn-outline-light btn-sm" onclick="logout()" style="position: relative; z-index: 10;">
+                <i class="bi bi-box-arrow-right me-1"></i>退出登录
+            </button>
+        </div>
+    </div>
+
+    <!-- Alert Config -->
+    <div class="collapsible-section">
+        <div class="collapsible-header">
+            <span><i class="bi bi-bell-fill text-primary me-2"></i>告警通知配置 (钉钉 / 飞书 / Email)</span>
+        </div>
+        <div class="collapsible-content">
+            
+            <!-- 渠道选择 -->
+            <div class="mb-4 pb-3 border-bottom">
+                <label class="form-label fw-bold text-primary"><i class="bi bi-broadcast me-2"></i>选择告警发送渠道</label>
+                <select class="form-select form-select-lg" id="activeChannel" onchange="toggleChannelConfig()" style="max-width: 400px;">
+                    <option value="dingtalk">钉钉 (DingTalk)</option>
+                    <option value="feishu">飞书 (Feishu/Lark)</option>
+                    <option value="email">邮件 (SMTP)</option>
+                </select>
+            </div>
+
+            <div class="row g-4">
+                <!-- 钉钉配置 -->
+                <div class="col-md-6 channel-group" id="dingtalkConfigGroup">
+                    <div class="card h-100 border-primary border-opacity-25 bg-primary bg-opacity-10">
+                        <div class="card-body">
+                            <h6 class="text-primary fw-bold mb-3"><i class="bi bi-robot"></i> 钉钉配置</h6>
+                            <div class="mb-3">
+                                <label class="form-label small">Webhook URL</label>
+                                <input type="text" class="form-control" id="dingtalkWebhook" placeholder="https://oapi.dingtalk.com/robot/send?...">
+                            </div>
+                            <div class="mb-0">
+                                <label class="form-label small">加签密钥 (SEC...)</label>
+                                <input type="text" class="form-control" id="dingtalkSecret" placeholder="SECxxxxxxxx">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 飞书配置 -->
+                <div class="col-md-6 channel-group" id="feishuConfigGroup" style="display: none;">
+                    <div class="card h-100 border-success border-opacity-25 bg-success bg-opacity-10">
+                        <div class="card-body">
+                            <h6 class="text-success fw-bold mb-3"><i class="bi bi-chat-dots"></i> 飞书配置</h6>
+                            <div class="mb-3">
+                                <label class="form-label small">Webhook URL</label>
+                                <input type="text" class="form-control" id="feishuWebhook" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/...">
+                            </div>
+                            <div class="mb-0">
+                                <label class="form-label small">签名校验密钥</label>
+                                <input type="text" class="form-control" id="feishuSecret" placeholder="可选密钥">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SMTP配置 -->
+                <div class="col-md-12 channel-group" id="smtpConfigGroup" style="display: none;">
+                    <div class="card h-100 border-info border-opacity-25 bg-info bg-opacity-10">
+                        <div class="card-body">
+                            <h6 class="text-info fw-bold mb-3" style="color: #0dcaf0!important; filter: brightness(0.6);"><i class="bi bi-envelope"></i> SMTP 邮件配置</h6>
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label class="form-label small">SMTP Host</label>
+                                    <input type="text" class="form-control" id="smtpHost" placeholder="smtp.office365.com">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small">Port</label>
+                                    <input type="number" class="form-control" id="smtpPort" placeholder="587">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small">收件人邮箱 (Receive Email)</label>
+                                    <input type="email" class="form-control" id="smtpTo" placeholder="admin@example.com">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small">发送账号 (User)</label>
+                                    <input type="text" class="form-control" id="smtpUser" placeholder="sender@example.com">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small">密码 (Password)</label>
+                                    <input type="password" class="form-control" id="smtpPass" placeholder="Password or App Password">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 通用策略 -->
+                <div class="col-12 mt-4">
+                    <h6 class="text-secondary border-bottom pb-2 mb-3">通用策略设置</h6>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">告警阈值 (天)</label>
+                            <input type="number" class="form-control" id="alertDays">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">检查间隔 (小时)</label>
+                            <input type="number" class="form-control" id="alertInterval">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold">最小静默期 (小时)</label>
+                            <input type="number" class="form-control" id="minAlertInterval">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 mt-4 text-end">
+                    <button class="btn btn-outline-primary me-2" onclick="triggerAlert()"><i class="bi bi-lightning-fill"></i> 测试告警</button>
+                    <button class="btn btn-success px-4" onclick="saveAlertConfig()"><i class="bi bi-save"></i> 保存配置</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ignored List -->
+    <div class="collapsible-section mb-5">
+        <div class="collapsible-header">
+            <span><i class="bi bi-eye-slash-fill text-secondary me-2"></i>忽略的应用列表 <span class="badge bg-secondary ms-2" id="ignoreCount">0</span></span>
+        </div>
+        <div class="collapsible-content">
+            <button class="btn btn-sm btn-outline-secondary mb-3" onclick="addIgnore()"><i class="bi bi-plus-lg"></i> 添加 App ID</button>
+            <table class="table table-hover table-sm align-middle" id="ignoredTable">
+                <thead class="table-light">
+                    <tr>
+                        <th>类型</th>
+                        <th>应用名称</th>
+                        <th>App ID</th>
+                        <th>凭据名称</th>
+                        <th>到期时间</th>
+                        <th class="text-end">操作</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="position-fixed top-0 end-0 p-3" style="z-index: 9999">
+    <div id="liveToast" class="toast align-items-center text-white border-0" role="alert">
+        <div class="d-flex">
+            <div class="toast-body" id="toastMsg"></div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function showToast(msg, type='success') {
+    const el = document.getElementById('liveToast');
+    el.className = `toast align-items-center text-white border-0 bg-${type}`;
+    document.getElementById('toastMsg').innerText = msg;
+    new bootstrap.Toast(el).show();
+}
+
+function toggleChannelConfig() {
+    const val = document.getElementById('activeChannel').value;
+    const ding = document.getElementById('dingtalkConfigGroup');
+    const feishu = document.getElementById('feishuConfigGroup');
+    const smtp = document.getElementById('smtpConfigGroup');
+
+    // Reset
+    ding.style.display = 'none';
+    feishu.style.display = 'none';
+    smtp.style.display = 'none';
+
+    // Show single selected
+    if (val === 'dingtalk') {
+        ding.style.display = 'block';
+    } else if (val === 'feishu') {
+        feishu.style.display = 'block';
+    } else if (val === 'email') {
+        smtp.style.display = 'block';
+    }
+}
+
+async function loadConfig() {
+    try {
+        const res = await fetch('/api/alert/config');
+        const cfg = await res.json();
+        document.getElementById('activeChannel').value = cfg.active_channel || 'dingtalk';
+        
+        document.getElementById('dingtalkWebhook').value = cfg.dingtalk_webhook||'';
+        document.getElementById('dingtalkSecret').value = cfg.dingtalk_secret||'';
+        document.getElementById('feishuWebhook').value = cfg.feishu_webhook||'';
+        document.getElementById('feishuSecret').value = cfg.feishu_secret||'';
+        
+        // SMTP Load
+        document.getElementById('smtpHost').value = cfg.smtp_host || '';
+        document.getElementById('smtpPort').value = cfg.smtp_port || '587';
+        document.getElementById('smtpUser').value = cfg.smtp_user || '';
+        document.getElementById('smtpPass').value = cfg.smtp_password || '';
+        document.getElementById('smtpTo').value = cfg.smtp_to_email || '';
+
+        document.getElementById('alertDays').value = cfg.alert_threshold_days||30;
+        document.getElementById('alertInterval').value = cfg.alert_check_interval_hours||24;
+        document.getElementById('minAlertInterval').value = cfg.min_alert_interval_hours||24;
+        
+        toggleChannelConfig(); 
+        loadIgnored();
+    } catch(e) {
+        showToast('加载配置失败: ' + e.message, 'danger');
+    }
+}
+
+async function saveAlertConfig() {
+    try {
+        const body = {
+            active_channel: document.getElementById('activeChannel').value,
+            dingtalk_webhook: document.getElementById('dingtalkWebhook').value,
+            dingtalk_secret: document.getElementById('dingtalkSecret').value,
+            feishu_webhook: document.getElementById('feishuWebhook').value,
+            feishu_secret: document.getElementById('feishuSecret').value,
+            
+            // SMTP Save
+            smtp_host: document.getElementById('smtpHost').value,
+            smtp_port: document.getElementById('smtpPort').value,
+            smtp_user: document.getElementById('smtpUser').value,
+            smtp_password: document.getElementById('smtpPass').value,
+            smtp_to_email: document.getElementById('smtpTo').value,
+
+            alert_threshold_days: document.getElementById('alertDays').value,
+            alert_check_interval_hours: document.getElementById('alertInterval').value,
+            min_alert_interval_hours: document.getElementById('minAlertInterval').value
+        };
+        const res = await fetch('/api/alert/config', {
+            method:'POST', 
+            headers:{'Content-Type':'application/json'}, 
+            body:JSON.stringify(body)
+        });
+        if (res.ok) {
+            showToast('配置已保存');
+        } else {
+            const data = await res.json();
+            showToast('保存失败: ' + (data.message || '未知错误'), 'danger');
+        }
+    } catch(e) {
+        showToast('保存失败: ' + e.message, 'danger');
+    }
+}
+
+async function triggerAlert() {
+    showToast('正在触发...', 'primary');
+    try {
+        const res = await fetch('/api/alert/trigger', {method:'POST'});
+        const d = await res.json();
+        showToast(d.message, d.status==='success'?'success':'danger');
+    } catch(e) {
+        showToast('触发失败: ' + e.message, 'danger');
+    }
+}
+
+async function loadIgnored() {
+    try {
+        const res = await fetch('/api/alert/ignored');
+        const items = await res.json();
+        
+        // 更新计数 (去重后的ID数量)
+        const uniqueIds = new Set(items.map(i => i.app_id));
+        document.getElementById('ignoreCount').innerText = uniqueIds.size;
+        
+        const tbody = document.querySelector('#ignoredTable tbody');
+        if (items.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">暂无忽略的应用</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = items.map(i => {
+            // 判断是否是"孤儿"数据（Azure里找不到）
+            const isOrphan = i.is_orphan === true;
+            const textClass = isOrphan ? 'text-muted fst-italic' : '';
+            const nameDisplay = isOrphan ? `<i class="bi bi-question-circle me-1"></i>${i.app_name}` : i.app_name;
+            
+            // 类型样式
+            let typeBadge = '';
+            if (i.type === 'Client Secret') typeBadge = '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">Secret</span>';
+            else if (i.type === 'Certificate') typeBadge = '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Cert</span>';
+            else typeBadge = '<span class="badge bg-light text-muted border">未知</span>';
+
+            return `
+            <tr>
+                <td>${typeBadge}</td>
+                <td class="${textClass} fw-medium">${nameDisplay}</td>
+                <td><code class="text-dark bg-light px-2 py-1 rounded border">${i.app_id}</code></td>
+                <td class="${textClass} small">${i.cred_name}</td>
+                <td class="${textClass} small">${i.expires_on}</td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-outline-danger" onclick="delIgnore('${i.app_id}')" title="从忽略列表中移除">
+                        <i class="bi bi-trash"></i> 移除
+                    </button>
+                </td>
+            </tr>`;
+        }).join('');
+    } catch(e) {
+        showToast('加载忽略列表失败: ' + e.message, 'danger');
+    }
+}
+
+async function addIgnore() {
+    const id = prompt("请输入要忽略的 App ID:");
+    if(id && id.trim()) {
+        try {
+            const res = await fetch('/api/alert/ignored', {
+                method:'POST', 
+                headers:{'Content-Type':'application/json'}, 
+                body:JSON.stringify({app_id: id.trim()})
+            });
+            if (res.ok) {
+                showToast('已添加到忽略列表');
+                loadIgnored();
+            } else {
+                const data = await res.json();
+                showToast('添加失败: ' + (data.message || '未知错误'), 'danger');
+            }
+        } catch(e) {
+            showToast('添加失败: ' + e.message, 'danger');
+        }
+    }
+}
+
+async function delIgnore(id) {
+    if(!confirm(`确定要从忽略列表中移除 App ID: ${id} 吗?`)) return;
+    try {
+        const res = await fetch('/api/alert/ignored', {
+            method:'DELETE', 
+            headers:{'Content-Type':'application/json'}, 
+            body:JSON.stringify({app_id:id})
+        });
+        if (res.ok) {
+            showToast('已从忽略列表移除');
+            loadIgnored();
+        } else {
+            const data = await res.json();
+            showToast('移除失败: ' + (data.message || '未知错误'), 'danger');
+        }
+    } catch(e) {
+        showToast('移除失败: ' + e.message, 'danger');
+    }
+}
+
+async function logout() {
+    if (!confirm('确定要退出登录吗？')) {
+        return;
+    }
+    try {
+        const res = await fetch('/admin/logout', {
+            method: 'POST',
+            credentials: 'same-origin'
+        });
+        if (res.ok) {
+            window.location.href = '/admin';
+        } else {
+            // 即使请求失败也跳转到登录页
+            window.location.href = '/admin';
+        }
+    } catch(e) {
+        console.error('Logout error:', e);
+        // 即使出错也跳转到登录页
+        window.location.href = '/admin';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadConfig();
+});
+</script>
+</body>
+</html>
+
