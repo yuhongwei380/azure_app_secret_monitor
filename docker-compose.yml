@@ -1,7 +1,7 @@
 
 services:
   azure-app-secret-monitor:
-    image: azure-app-secret-monitor:latest
+    image: yuhongwei1997/azure-app-secret-monitor:latest
     container_name: azure-app-secret-monitor
     ports:
       - "8000:8000"
