@@ -323,7 +323,19 @@ body {
         </div>
         <div class="collapsible-content" id="ignoredContent">
             <button class="btn btn-sm btn-outline-secondary mb-3" onclick="addIgnore()"><i class="bi bi-plus-lg"></i> 添加 App ID</button>
-            <table class="table table-sm" id="ignoredTable"><tbody></tbody></table>
+            <table class="table table-hover table-sm align-middle" id="ignoredTable">
+                <thead class="table-light">
+                    <tr>
+                        <th>类型</th>
+                        <th>应用名称</th>
+                        <th>App ID</th>
+                        <th>凭据名称</th>
+                        <th>到期时间</th>
+                        <th class="text-end">操作</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
         </div>
     </div>
 </div>
@@ -456,7 +468,7 @@ async function loadConfig() {
     document.getElementById('alertInterval').value = cfg.alert_check_interval_hours||24;
     document.getElementById('minAlertInterval').value = cfg.min_alert_interval_hours||24;
     
-    toggleChannelConfig(); // Refresh UI visibility based on loaded config
+    toggleChannelConfig(); 
     loadIgnored();
 }
 
@@ -492,11 +504,44 @@ async function triggerAlert() {
 
 async function loadIgnored() {
     const res = await fetch('/api/alert/ignored');
-    const ids = await res.json();
-    document.getElementById('ignoreCount').innerText = ids.length;
-    document.querySelector('#ignoredTable tbody').innerHTML = ids.map(id => 
-        `<tr><td><code>${id}</code></td><td class="text-end"><button class="btn btn-sm text-danger" onclick="delIgnore('${id}')"><i class="bi bi-trash"></i></button></td></tr>`
-    ).join('');
+    const items = await res.json();
+    
+    // 更新计数 (去重后的ID数量)
+    const uniqueIds = new Set(items.map(i => i.app_id));
+    document.getElementById('ignoreCount').innerText = uniqueIds.size;
+    
+    const tbody = document.querySelector('#ignoredTable tbody');
+    if (items.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">暂无忽略的应用</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = items.map(i => {
+        // 判断是否是“孤儿”数据（Azure里找不到）
+        const isOrphan = i.is_orphan === true;
+        const textClass = isOrphan ? 'text-muted fst-italic' : '';
+        const nameDisplay = isOrphan ? `<i class="bi bi-question-circle me-1"></i>${i.app_name}` : i.app_name;
+        
+        // 类型样式
+        let typeBadge = '';
+        if (i.type === 'Client Secret') typeBadge = '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">Secret</span>';
+        else if (i.type === 'Certificate') typeBadge = '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Cert</span>';
+        else typeBadge = '<span class="badge bg-light text-muted border">未知</span>';
+
+        return `
+        <tr>
+            <td>${typeBadge}</td>
+            <td class="${textClass} fw-medium">${nameDisplay}</td>
+            <td><code class="text-dark bg-light px-2 py-1 rounded border">${i.app_id}</code></td>
+            <td class="${textClass} small">${i.cred_name}</td>
+            <td class="${textClass} small">${i.expires_on}</td>
+            <td class="text-end">
+                <button class="btn btn-sm btn-outline-danger" onclick="delIgnore('${i.app_id}')" title="从忽略列表中移除">
+                    <i class="bi bi-trash"></i> 移除
+                </button>
+            </td>
+        </tr>`;
+    }).join('');
 }
 
 async function addIgnore() {
@@ -504,6 +549,7 @@ async function addIgnore() {
     if(id) { await fetch('/api/alert/ignored', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({app_id:id})}); loadIgnored(); }
 }
 async function delIgnore(id) {
+    if(!confirm(`确定要从忽略列表中移除 App ID: ${id} 吗?`)) return;
     await fetch('/api/alert/ignored', {method:'DELETE', headers:{'Content-Type':'application/json'}, body:JSON.stringify({app_id:id})}); loadIgnored();
 }
 
