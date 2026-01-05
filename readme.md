@@ -1,4 +1,4 @@
-# 这是一个用于监控Azure Directory中应用注册的密钥到期时间的工具
+# 一个用于监控Azure Directory中应用注册的密钥到期时间的工具（支持容器化部署）
 
 # ✨ 特性亮点
 🔔 智能监控：自动检测 Azure AD 应用凭据（证书）过期情况
@@ -35,21 +35,21 @@ openssl req -new -x509 -key app_monitor_key.pem -out app_monitor_cert.pem -days 
 ## 步骤 2：Azure AD 应用配置
 
 ### 1.注册新应用
--登录 Azure Portal
--进入 Microsoft Entra ID → 应用注册 → 新注册
--名称：App-Credential-Monitor（或自定义）
--支持账户类型：仅此组织目录中的账户
+- 登录 Azure Portal
+- 进入 Microsoft Entra ID → 应用注册 → 新注册
+- 名称：App-Credential-Monitor（或自定义）
+- 支持账户类型：仅此组织目录中的账户
 
 ### 2.上传证书
--进入创建的应用 → 证书和密码 → 证书 → 上传证书
--选择生成的 app_monitor_cert.pem 文件
--上传后记录 证书指纹 (Thumbprint) [非必需]
+- 进入创建的应用 → 证书和密码 → 证书 → 上传证书
+- 选择生成的 app_monitor_cert.pem 文件
+- 上传后记录 证书指纹 (Thumbprint) [非必需]
 
 ### 3.配置 API 权限
--进入 API 权限 → 添加权限 → Microsoft Graph
--选择 应用程序权限
--添加：Application.Read.All
--点击 "授予管理员同意"（需要全局/应用管理员）
+- 进入 API 权限 → 添加权限 → Microsoft Graph
+- 选择 应用程序权限
+- 添加：Application.Read.All
+- 点击 "授予管理员同意"（需要全局/应用管理员）
 
 ### 4.记录关键信息
 Application (client) ID
@@ -76,8 +76,8 @@ pip install -r requirements.txt
 vim .env
 # 编辑 .env 文件，填入您的配置信息
 
-# 运行监控器
-python3 azure_app_monitor.py
+# 运行监控器（后台运行）
+python3 azure_app_monitor.py > monitor.log 2>&1 &
 ```
 
 #### 方法二：Docker 容器运行
