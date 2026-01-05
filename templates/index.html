@@ -130,7 +130,12 @@ body {
                 <p class="mb-0 opacity-75 small">实时监控和管理 Azure AD 应用凭据的到期时间</p>
             </div>
         </div>
-        <div class="text-end small opacity-75" id="lastUpdated">加载中...</div>
+        <div class="d-flex flex-column align-items-end gap-2">
+            <a href="/admin" class="btn btn-light btn-sm" style="text-decoration: none; position: relative; z-index: 10;">
+                <i class="bi bi-shield-lock me-1"></i>管理员登录
+            </a>
+            <div class="text-end small opacity-75" id="lastUpdated" style="position: relative; z-index: 10;">加载中...</div>
+        </div>
     </div>
 
     <!-- Stats -->
@@ -230,15 +235,6 @@ body {
         </div>
     </div>
 
-    <!-- 管理员入口提示 -->
-    <div class="collapsible-section mb-5">
-        <div class="collapsible-header" style="cursor: default;">
-            <span><i class="bi bi-shield-lock text-primary me-2"></i>管理功能</span>
-            <a href="/admin" class="btn btn-sm btn-outline-primary">
-                <i class="bi bi-box-arrow-in-right me-1"></i>管理员登录
-            </a>
-        </div>
-    </div>
 </div>
 
 <!-- Toast -->
