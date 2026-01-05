@@ -22,6 +22,7 @@ services:
       - EXPIRY_THRESHOLD_DAYS=30
       - SHOW_APPS_WITHOUT_PASSWORD=0   # 0 = 隐藏（仅有证书、没有密码的应用会被过滤掉）; 1 = 显示（仍会展示仅有证书的应用）
       - CACHE_TTL_SECONDS=300
+      - ADMIN_PASSWORD=123456
       #- DINGTALK_WEBHOOK=
       #- DINGTALK_SECRET=
       # 可选：覆盖 .env 中的值（但通常不需要，因为 .env 已挂载）
