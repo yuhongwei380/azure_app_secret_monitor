@@ -1,60 +1,101 @@
-操作步骤
-一、生成密钥
+# 一个用于监控Azure Directory中应用注册的密钥到期时间的工具（支持容器化部署）
+
+# ✨ 特性亮点
+🔔 智能监控：自动检测 Azure AD 应用凭据（证书）过期情况
+
+⏰ 提前预警：支持自定义过期前天数告警阈值
+
+🔐 安全可靠：使用证书认证而非密码，更安全的 Azure AD 集成
+
+📱 多平台通知：支持钉钉、飞书等多种 Webhook 通知 和邮件通知（需配置SMTP）
+
+🐳 容器化部署：提供  Docker Compose 一键部署方案（需要提前安装Docker 和Docker Compose）
+
+⚙️ 灵活配置：可通过环境变量或配置文件轻松自定义
+
+📊 状态追踪：后台缓存记录已告警状态，避免重复通知干扰
+
+# 🚀 快速开始
+前提条件
+Azure 订阅和全局管理员/应用管理员权限
+Python 3.8+ 或 Docker 环境
+钉钉/飞书等 Webhook 配置（可选）
+
+
+## 步骤 1：生成安全证书
 ```
-# 生成私钥
+# 生成 2048 位 RSA 私钥
 openssl genrsa -out app_monitor_key.pem 2048
 
-# 生成公钥证书（有效期10年）
-openssl req -new -x509 -key app_monitor_key.pem -out app_monitor_cert.pem -days 3650
+# 创建自签名公钥证书（有效期10年）
+openssl req -new -x509 -key app_monitor_key.pem -out app_monitor_cert.pem -days 3650 -subj "/C=CN/ST=Zhejiang/L=Zhejiang/O=company-inc/CN=AppCredentialMonitor"
 ```
 
 
-二、Azure 配置
-```
-1.登录 Azure Portal
-2.进入 Microsoft Entra ID > 应用注册 > 新注册
-    名称：App-Credential-Monitor
-    支持账号类型：选“仅此组织目录”
-3.创建后，进入该应用
-4.左侧菜单：证书和密码 > 证书 > 上传证书
-    选择 app_monitor_cert.pem（或 .cer 文件）
-    上传成功后，你会看到证书指纹（Thumbprint）
-5..授予权限：
-    转到 API 权限 > 添加权限 > Microsoft Graph > 应用权限
-    添加：Application.Read.All
-    点击 “代表管理员授予同意”（需要全局/应用管理员）
-6.记下：
+## 步骤 2：Azure AD 应用配置
+
+### 1.注册新应用
+- 登录 Azure Portal
+- 进入 Microsoft Entra ID → 应用注册 → 新注册
+- 名称：App-Credential-Monitor（或自定义）
+- 支持账户类型：仅此组织目录中的账户
+
+### 2.上传证书
+- 进入创建的应用 → 证书和密码 → 证书 → 上传证书
+- 选择生成的 app_monitor_cert.pem 文件
+- 上传后记录 证书指纹 (Thumbprint) [非必需]
+
+### 3.配置 API 权限
+- 进入 API 权限 → 添加权限 → Microsoft Graph
+- 选择 应用程序权限
+- 添加：Application.Read.All
+- 点击 "授予管理员同意"（需要全局/应用管理员）
+
+### 4.记录关键信息
 Application (client) ID
 Directory (tenant) ID
 ```
-
-三、克隆代码&Python运行
-3.1 git clone
+应用程序(客户端) ID：xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+目录(租户) ID：xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ```
-git clone https://github.com/yuhongwei380/Azure_app_monitor
+## 步骤 3：部署与运行
+### 方法一： Python 环境运行
 ```
-3.2 修改env
+# 克隆仓库
+git clone https://github.com/yuhongwei380/azure_app_secret_monitor.git
+cd azure_app_secret_monitor
 
-
-3.3 安装运行环境
-```
+# 安装依赖
 pip install msal requests cryptography 
 pip3 install python-dotenv
 pip3 install flask
+or
 pip install -r requirements.txt
+
+# 配置环境变量
+vim .env
+# 编辑 .env 文件，填入您的配置信息
+
+# 运行监控器（后台运行）
+python3 azure_app_monitor.py > monitor.log 2>&1 &
 ```
-3.4 python 本地运行
+
+#### 方法二：Docker 容器运行
 
 ```
-python3 azure_app_monitor.py
-```
+# 克隆仓库
+git clone https://github.com/yuhongwei380/azure_app_secret_monitor.git
+cd azure_app_secret_monitor
 
-3.5 Docker运行
-<p>需要环境：docker 和docker-compose</p>
-<p>需要修改compose.yml中的client ID和Tenant ID</p>
+# 创建必要的配置文件
+touch alert_config.json last_alerted.json
 
-```
-touch alert_config.json
-touch last_alerted.json
+# 编辑 docker-compose.yml，填入您的 client_id 和 tenant_id
+vim docker-compose.yml
+
+# 启动服务
 docker-compose up -d
+
+# 查看日志
+docker-compose logs -f
 ```
